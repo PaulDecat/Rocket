@@ -1,0 +1,16 @@
+{
+  "name": "rocket",
+  "version": "1.0.0",
+  "description": "ROCKET — votre morning économique vocal avec Nova et Atlas",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/unit.js && node tests/e2e.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.129.0",
+    "msedge-tts": "^2.0.8"
+  }
+}

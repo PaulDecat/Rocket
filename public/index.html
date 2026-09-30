@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="fr" data-theme="clean">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Rocket — Morning économique</title>
+  <meta name="description" content="Rocket : votre morning économique en podcast avec Nova et Atlas, graphiques, radar investissement et assistant vocal.">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Rocket">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Orbitron:wght@500;700&family=Rajdhani:wght@500;600;700&display=swap">
+  <link rel="stylesheet" href="/style.css">
+  <script>
+    try { var t = localStorage.getItem('rocket.theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+  </script>
+</head>
+<body>
+  <div id="hudBg" class="hud-bg" aria-hidden="true"></div>
+
+  <!-- Écran de démarrage -->
+  <div id="splash" class="splash" role="dialog" aria-modal="true" aria-labelledby="splashTitle">
+    <div class="splash-inner">
+      <div class="splash-logo" aria-hidden="true">
+        <svg viewBox="0 0 64 64" width="72" height="72"><use href="#rocketIcon"/></svg>
+      </div>
+      <h1 id="splashTitle" class="splash-title">ROCKET</h1>
+      <p class="splash-sub">Votre morning économique</p>
+      <p class="splash-label">Choisissez votre style</p>
+      <div class="theme-cards" id="themeCards" role="radiogroup" aria-label="Style de l'interface"></div>
+      <button id="startBtn" class="btn-primary" type="button">▶ Lancer le morning</button>
+      <p id="splashStatus" class="splash-status" aria-live="polite">Chargement des marchés…</p>
+    </div>
+  </div>
+
+  <!-- Barre du haut -->
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 64 64" width="26" height="26" aria-hidden="true"><use href="#rocketIcon"/></svg>
+      <span class="brand-name">R.O.C.K.E.T.</span>
+      <span class="brand-tag">Morning économique &amp; radar des marchés</span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Vues">
+      <button class="tab active" role="tab" aria-selected="true" data-view="briefing" type="button">Briefing</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="radar" type="button">Radar invest</button>
+    </nav>
+    <div class="mini-quotes" id="miniQuotes" aria-label="Cotations"></div>
+    <span id="livePill" class="pill pill-demo" title="État des données">DÉMO</span>
+    <button id="styleBtn" class="btn-ghost" type="button" aria-haspopup="true" aria-expanded="false">🎨 Style</button>
+    <div id="styleMenu" class="style-menu" hidden role="menu"></div>
+  </header>
+
+  <main class="layout">
+    <!-- Colonne gauche -->
+    <aside class="col col-left">
+      <section class="panel clock-panel" aria-label="Horloge">
+        <svg class="clock" viewBox="0 0 200 200" aria-hidden="true">
+          <circle cx="100" cy="100" r="92" class="ring ring-outer"/>
+          <circle cx="100" cy="100" r="80" class="ring ring-dash"/>
+          <circle cx="100" cy="100" r="70" class="ring ring-sec-bg"/>
+          <circle cx="100" cy="100" r="70" class="ring ring-sec" id="secRing" pathLength="60" transform="rotate(-90 100 100)"/>
+        </svg>
+        <div class="clock-text">
+          <div id="clockTime" class="clock-time">--:--</div>
+          <div id="clockDay" class="clock-day">—</div>
+        </div>
+        <div id="clockDate" class="clock-date">—</div>
+      </section>
+      <section class="panel markets-panel">
+        <h2 class="panel-title">Marchés</h2>
+        <ul id="marketList" class="market-list"></ul>
+      </section>
+    </aside>
+
+    <!-- Centre -->
+    <section class="col col-center">
+      <section class="panel stage hud-corners" id="stage">
+        <div class="stage-head">
+          <div class="stage-titles">
+            <h2 id="stageLabel" class="stage-label">Rocket</h2>
+            <div id="stageMeta" class="stage-meta"></div>
+          </div>
+          <div id="periodTabs" class="period-tabs" hidden role="tablist" aria-label="Période"></div>
+          <button id="stageClose" class="icon-btn" type="button" hidden aria-label="Fermer la fiche">✕</button>
+        </div>
+        <div class="stage-body">
+          <canvas id="chart" class="chart" aria-label="Graphique"></canvas>
+          <div id="overlay" class="overlay"></div>
+          <div id="detailStats" class="detail-stats" hidden></div>
+        </div>
+      </section>
+
+      <section class="core-row" aria-label="Nova">
+        <div class="host-badge host-lead" id="badgeLead"><strong>NOVA</strong><span>Présentatrice</span></div>
+        <button id="coreBtn" class="core-btn" type="button" aria-label="Parler à Nova">
+          <canvas id="core" width="170" height="170"></canvas>
+        </button>
+        <div class="host-badge host-co" id="badgeCo"><strong>ATLAS</strong><span>Co-animateur</span></div>
+      </section>
+
+      <form id="askForm" class="ask-bar" autocomplete="off">
+        <button id="micBtn" class="icon-btn mic-btn" type="button" aria-label="Poser une question au micro">🎙</button>
+        <input id="askInput" type="text" placeholder="Demandez à Nova… « Comment va le CAC 40 ? »" aria-label="Question pour Nova" maxlength="500">
+        <button class="icon-btn send-btn" type="submit" aria-label="Envoyer">➤</button>
+        <button id="wakeBtn" class="wake-btn" type="button" aria-pressed="true" title="Réveil vocal « OK Nova »">OK NOVA <b>ON</b></button>
+      </form>
+
+      <section class="subtitles" aria-live="polite">
+        <div id="subSpeaker" class="sub-speaker">NOVA</div>
+        <div id="subText" class="sub-text">Appuyez sur « Lancer le morning » pour commencer.</div>
+      </section>
+    </section>
+
+    <!-- Colonne droite -->
+    <aside class="col col-right">
+      <section class="panel music-panel" id="musicPanel" hidden>
+        <div class="music-head">
+          <h2 class="panel-title">Musique</h2>
+          <div class="music-btns">
+            <button class="icon-btn" id="musicStop" type="button" aria-label="Arrêter la musique">■</button>
+            <button class="icon-btn" id="musicNext" type="button" aria-label="Chanson suivante">⏭</button>
+            <a class="icon-btn" id="musicOpen" href="#" target="_blank" rel="noopener" aria-label="Ouvrir dans Deezer">↗</a>
+            <button class="icon-btn" id="musicClose" type="button" aria-label="Fermer le panneau musique">✕</button>
+          </div>
+        </div>
+        <div id="musicTitle" class="music-title">—</div>
+        <div id="musicNote" class="music-note">Lecture dans l'appli Deezer</div>
+        <div id="musicFrameWrap" class="music-frame"></div>
+      </section>
+      <section class="panel news-panel">
+        <h2 class="panel-title">Actualités</h2>
+        <ol id="newsList" class="news-list"></ol>
+      </section>
+      <section class="panel program-panel">
+        <h2 class="panel-title">Programme</h2>
+        <div class="progress"><div id="progressBar" class="progress-bar"></div></div>
+        <ol id="chapters" class="chapters"></ol>
+        <div class="controls">
+          <button class="ctrl" id="prevBtn" type="button" aria-label="Réplique précédente">⏮</button>
+          <button class="ctrl ctrl-main" id="playBtn" type="button" aria-label="Lecture">▶</button>
+          <button class="ctrl" id="nextBtn" type="button" aria-label="Réplique suivante">⏭</button>
+          <button class="ctrl" id="refreshBtn" type="button" aria-label="Actualiser les données">⟳</button>
+          <button class="ctrl" id="settingsBtn" type="button" aria-label="Réglages">⚙</button>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="ticker" aria-label="Bandeau des marchés et des actualités">
+    <div id="tickerTrack" class="ticker-track"></div>
+  </footer>
+
+  <!-- Réglages -->
+  <dialog id="settings" class="settings">
+    <form method="dialog" class="settings-form">
+      <h2>Réglages</h2>
+      <p class="set-row"><span>Voix :</span> <b id="ttsMode">—</b></p>
+      <label class="set-row">Voix de Nova
+        <span class="set-inline"><select id="voiceLead"></select><button type="button" class="btn-ghost" data-test="lead">▶ Écouter</button></span>
+      </label>
+      <label class="set-row">Voix d'Atlas
+        <span class="set-inline"><select id="voiceCo"></select><button type="button" class="btn-ghost" data-test="co">▶ Écouter</button></span>
+      </label>
+      <label class="set-row">Vitesse <output id="rateOut">1,05</output>
+        <input id="rate" type="range" min="0.8" max="1.3" step="0.05" value="1.05">
+      </label>
+      <label class="set-check"><input id="solo" type="checkbox"> Nova seule (une seule voix)</label>
+      <label class="set-row">Jouer la musique dans
+        <select id="musicTarget">
+          <option value="app">l'appli Deezer de l'ordinateur</option>
+          <option value="widget">le lecteur intégré</option>
+        </select>
+      </label>
+      <label class="set-row">Profil Deezer (lien de partage)
+        <span class="set-inline"><input id="deezerUser" type="text" placeholder="https://www.deezer.com/fr/profile/…"><button type="button" class="btn-ghost" id="deezerCheck">Vérifier</button></span>
+      </label>
+      <p id="deezerStatus" class="set-note">Deezer → votre profil → Partager → Copier le lien.</p>
+      <p class="set-row"><span>Réponses :</span> <b id="aiMode">—</b></p>
+      <div class="set-actions"><button class="btn-primary" value="close">Fermer</button></div>
+    </form>
+  </dialog>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="rocketIcon" viewBox="0 0 64 64">
+      <circle cx="32" cy="32" r="29" fill="none" stroke="currentColor" stroke-width="2.5" opacity=".45"/>
+      <path d="M32 9c7 6 10 14 10 22v11H22V31c0-8 3-16 10-22z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+      <circle cx="32" cy="27" r="4.5" fill="currentColor"/>
+      <path d="M22 36l-7 8v4l7-3M42 36l7 8v4l-7-3" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M27 46l5 9 5-9" fill="currentColor"/>
+    </symbol>
+  </svg>
+
+  <script src="/themes.js"></script>
+  <script src="/hud-bg.js"></script>
+  <script src="/charts.js"></script>
+  <script src="/voice.js"></script>
+  <script src="/listen.js"></script>
+  <script src="/music.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
