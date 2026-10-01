@@ -15,7 +15,7 @@
     config: null, briefing: null, bySym: {}, script: [], chapters: [],
     idx: 0, playing: false, paused: false, runToken: 0, resumeWait: null,
     view: 'briefing', visual: null, prevVisual: null, detail: null,
-    history: [], asking: false, coreState: 'idle', host: null, mini: 'bourse', autoPaused: false, micErrorAt: 0,
+    history: [], asking: false, coreState: 'idle', host: null, mini: 'bourse', autoPaused: false, micErrorAt: 0, queue: [], fromVoice: false,
     intradayCache: new Map(), started: false,
   };
 
@@ -690,7 +690,7 @@
   }
 
   // Règle : « Ok Rocket … s'il te plaît ». Renvoie true si la demande est exécutée.
-  function submit(raw) {
+  function submit(raw, fromVoice) {
     const p = Command.parse(raw);
     if (!p.complete) {
       setStatus(p.wake ? "Terminez votre demande par « s'il te plaît », Monsieur." : Command.HINT);
@@ -701,14 +701,15 @@
     S.autoPaused = false;
     $('askInput').value = '';
     if (!p.question) { sayText(SORRY); return true; }
-    ask(p.question);
+    ask(p.question, { voice: !!fromVoice });
     return true;
   }
 
   async function ask(question, opts = {}) {
     question = String(question || '').trim();
     if (!question) return;
-    if (S.asking) return;
+    // Plusieurs questions à la suite : elles attendent leur tour au lieu d'être perdues.
+    if (S.asking) { S.queue.push([question, opts]); setStatus(`Question notée, Monsieur (${S.queue.length} en attente).`); return; }
     S.asking = true;
     Listen.cancel();
     if (S.playing) stopPlayback(); else Voice.stop();
@@ -716,12 +717,14 @@
     setCore('thinking');
     setStatus('Rocket réfléchit…');
     let result = null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 200000);
     try {
       const r = await fetch('/api/ask', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
         body: JSON.stringify({
           question, history: S.history.slice(-6), deezerUser: getDeezerUser(),
-          context: { planning: Views.Planning.list(), coach: Views.Coach.summary() },
+          context: { planning: Views.Planning.list(), coach: Views.Coach.summary(), city: getCity() },
         }),
       });
       if (!r.ok) {
@@ -747,8 +750,9 @@
         if (!result && buf.trim()) { try { result = JSON.parse(buf); } catch (e) { /* ignore */ } }
       }
     } catch (e) {
-      result = { answer: 'Le serveur Rocket ne répond pas, Monsieur. Vérifiez que la fenêtre du Terminal est toujours ouverte.' };
+      result = { answer: ctrl.signal.aborted ? "Désolé Monsieur, la réponse prend trop de temps. Posez-moi une autre question." : 'Le serveur Rocket ne répond pas, Monsieur. Vérifiez que la fenêtre noire de Rocket est toujours ouverte.' };
     }
+    clearTimeout(timer);
     S.asking = false;
     if (!result) result = { answer: SORRY };
     let answer = result.answer || SORRY;
@@ -757,11 +761,14 @@
       if (extra) answer += ' ' + extra;
     }
     const action = result.action;
-    // Actions sur les données personnelles (stockées dans le navigateur).
-    if (action === 'planning-add' && result.event) { Views.Planning.add(result.event); }
-    if (action === 'planning-remove' && result.removeId) { Views.Planning.remove(result.removeId); }
-    if (action === 'coach-log' && result.habit) { Views.Coach.log(result.habit, Number(result.delta) || 1); }
-    if (result.recipeId) Views.showRecipe(result.recipeId);
+    // Actions sur les données personnelles (stockées dans le navigateur) ; une phrase peut en contenir plusieurs.
+    for (const a of result.actions || [result]) {
+      if (a.action === 'planning-add' && a.event) Views.Planning.add(a.event);
+      if (a.action === 'planning-remove' && a.removeId) Views.Planning.remove(a.removeId);
+      if (a.action === 'coach-log' && a.habit) Views.Coach.log(a.habit, Number(a.delta) || 1);
+      if (a.recipeId) Views.showRecipe(a.recipeId);
+      if (a.music && a !== result) Music.handle(a.music);
+    }
     if (result.visual) {
       const keep = opts.keepVisual && !['custom', 'figure'].includes(result.visual.type);
       if (!keep) {
@@ -778,14 +785,27 @@
       Music.stop();
       setStatus(answer);
       setCore('idle');
+      S.queue = [];
       return;
     }
     if (action === 'play' || action === 'next') {
       await sayText(answer);
-      run(action === 'next' ? S.idx + 1 : S.idx);
+      // « Lance la matinale » : depuis le début ; « reprends » : là où elle s'était arrêtée.
+      const from = action === 'next' ? S.idx + 1 : result.from === 'start' || S.idx >= S.script.length - 1 ? 0 : S.idx;
+      run(from);
       return;
     }
     await sayText(answer);
+    if (S.queue.length) { const [q, o] = S.queue.shift(); ask(q, o); return; }
+    // Conversation : après une réponse à une demande vocale, Rocket réécoute pour la question suivante.
+    if (opts.voice && !Listen.latched && !Listen.capturing && !S.playing) followUp();
+  }
+
+  async function followUp() {
+    setStatus('Une autre question, Monsieur ? Je vous écoute…');
+    const raw = await Listen.once({ maxWaitMs: 8000, quiet: true });
+    if (!raw) { if (S.coreState === 'listening') setCore('idle'); setStatus("À votre service, Monsieur. Appuyez sur « Parler » pour une nouvelle question."); return; }
+    submit(raw, true);
   }
 
   // ---------- Boutons « Parler » et « Maintenir » ----------
@@ -839,7 +859,7 @@
       resumeAfterListening();
       return;
     }
-    if (!submit(raw)) resumeAfterListening();
+    if (!submit(raw, true)) resumeAfterListening();
   }
 
   function onLock() {
@@ -857,7 +877,7 @@
     transcribing: (on) => { if (on && !S.asking) setStatus('Transcription…'); },
     engine: () => setStatus("Votre navigateur ne transmet pas la voix : Rocket passe à son moteur vocal local."),
     wake: () => { pauseForListening(); setCore('listening'); setStatus('Je vous écoute, Monsieur…'); },
-    command: (question, raw) => { submit(raw); },
+    command: (question, raw) => { submit(raw, false); },
     incomplete: () => { setStatus("Terminez votre demande par « s'il te plaît », Monsieur."); resumeAfterListening(); if (S.coreState === 'listening' && !Listen.latched) setCore('idle'); },
     interim: (t) => { if (t && !S.asking) setStatus(t); },
     state: updateTalkUI,
@@ -882,6 +902,7 @@
     if (wasPlaying && S.playing && S.paused) run(S.idx);
   }
 
+  function getCity() { try { return localStorage.getItem('rocket.city') || ''; } catch (e) { return ''; } }
   function getDeezerUser() { try { return localStorage.getItem('rocket.deezer') || ''; } catch (e) { return ''; } }
 
   // ---------- Réglages ----------
@@ -894,6 +915,7 @@
     $('rate').value = s.rate; $('rateOut').textContent = fmt(s.rate, 2);
     $('musicTarget').value = Music.target;
     $('deezerUser').value = getDeezerUser();
+    $('citySel').value = getCity();
     const modeTxt = { edge: 'voix Microsoft (gratuites, via le serveur)', elevenlabs: 'ElevenLabs', browser: 'voix du navigateur' };
     $('ttsMode').textContent = modeTxt[Voice.mode] || Voice.mode;
     const serverVoices = Voice.mode === 'edge';
@@ -933,7 +955,12 @@
     setTimeout(() => { $('splash').hidden = true; }, 400);
     chart.resize();
     drawSparklines();
-    run(0);
+    // La matinale ne démarre plus toute seule : Rocket attend vos demandes.
+    const hint = "Pour écouter la matinale : « Ok Rocket, lance la matinale, s'il te plaît », ou le bouton ▶.";
+    await sayText('Bonjour Monsieur, Rocket est à votre service.');
+    setStatus(S.config && S.config.ai === 'local'
+      ? `${hint} Pour que je réponde à toutes vos questions, connectez Claude (voir le mode d'emploi).`
+      : hint);
   }
 
   function bind() {
@@ -1008,6 +1035,7 @@
     $('musicTarget').addEventListener('change', (e) => Music.setTarget(e.target.value));
     $('sttSel').addEventListener('change', (e) => { Listen.setPref(e.target.value); fillSettings(); });
     $('deezerCheck').addEventListener('click', checkDeezer);
+    $('citySel').addEventListener('change', (e) => { try { localStorage.setItem('rocket.city', e.target.value.trim().slice(0, 60)); } catch (err) { /* ignore */ } });
     $('deezerUser').addEventListener('change', () => { try { localStorage.setItem('rocket.deezer', $('deezerUser').value.trim()); } catch (e) { /* ignore */ } });
     $('settings').addEventListener('click', (e) => {
       const b = e.target.closest('[data-test]');

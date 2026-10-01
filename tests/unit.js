@@ -183,6 +183,37 @@ test('assistant : planning et coach à partir du contexte du navigateur', () => 
   assert.strictEqual(add.event.title, 'Courses');
 });
 
+test('v4 : « roquette » = « Rocket »', () => {
+  const C = require('../public/command');
+  assert.strictEqual(C.parse("Ok roquette, quelle heure est-il, s'il te plaît").question, 'quelle heure est-il');
+  assert.strictEqual(C.parse('OK Roquettes comment va le CAC s’il te plaît').complete, true);
+  assert.strictEqual(C.normalize('Ok roquette, une salade de roquette'), 'Ok Rocket, une salade de roquette');
+});
+
+test('v4 : culture générale locale (heure, calculs, blagues)', async () => {
+  const K = require('../lib/knowledge');
+  const cases = { 'combien font 12 fois 7': 'Cela fait 84', 'calcule 15 pour cent de 80': 'Cela fait 12', 'combien font quatre-vingt-dix-sept moins 7': 'Cela fait 90',
+    'racine carrée de 144': 'Cela fait 12', 'combien font 2 plus 2 fois 3': 'Cela fait 8', 'quelle heure est-il': 'Il est', 'quel jour sommes-nous': 'Nous sommes le' };
+  for (const [q, want] of Object.entries(cases)) assert.ok(String(await K.answer(q)).startsWith(want), q);
+  assert.strictEqual(K.evaluate('2+'), null);
+  assert.ok(/\?/.test(await K.answer('raconte une blague')));
+});
+
+test('v4 : plusieurs questions dans une phrase, matinale sur demande', async () => {
+  assert.deepStrictEqual(assistant.splitQuestions('quelle heure est-il et comment va le CAC 40'), ['quelle heure est-il', 'comment va le CAC 40']);
+  assert.deepStrictEqual(assistant.splitQuestions('le CAC 40 et le DAX'), ['le CAC 40 et le DAX']);
+  const r = await assistant.ask({ question: 'quelle heure est-il et combien font 2 plus 3', context: {} }, briefing, () => {});
+  assert.ok(/^Il est .* Cela fait 5/.test(r.answer), r.answer);
+  const add = await assistant.ask({ question: 'ajoute dentiste demain à 15h et ouvre la cuisine', context: {} }, { ...briefing, cinema: [], politics: [] }, () => {});
+  assert.deepStrictEqual(add.actions.map((a) => a.action), ['planning-add', 'tab']);
+  for (const q of ['lance la matinale', 'mets la matinale', 'joue la matinade', 'lance le briefing']) {
+    assert.deepStrictEqual(assistant.detectIntent(q), { kind: 'action', action: 'play', from: 'start' }, q);
+  }
+  assert.strictEqual(assistant.detectIntent('reprends la matinale').from, 'resume');
+  assert.strictEqual(require('../lib/music').parseMusic('lance la matinale'), null);
+  assert.notStrictEqual(assistant.detectIntent('qui est le premier ministre').kind, 'politics');
+});
+
 test('graphiques Claude : jamais sans source', () => {
   assert.strictEqual(research.pointsVisual({ series: [{ name: 'x', points: [{ x: '2024', y: 1 }, { x: '2025', y: 2 }] }] }), null);
   const v = research.pointsVisual({ title: 'CDS', source: 'Test', series: [{ name: 'CDS', points: [{ x: '2024-01-01', y: 30 }, { x: '2025-01-01', y: 35 }] }] });

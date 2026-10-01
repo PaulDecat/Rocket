@@ -1,6 +1,6 @@
-# 🚀 Rocket v3 — votre assistant du matin
+# 🚀 Rocket v4 — votre assistant personnel
 
-Chaque matin, **Rocket** vous lit un point complet : Bourses, taux et devises, matières premières, radar
+Rocket répond à **toutes vos questions**, à la voix. Et quand vous le lui demandez, il vous lit un point complet : Bourses, taux et devises, matières premières, radar
 investissement, actualité économique et politique, votre agenda du jour, une idée de recette et un conseil
 bien-être. Des graphiques s'affichent pendant qu'il parle.
 
@@ -9,7 +9,8 @@ Rocket a aussi des onglets **Cuisine**, **Ciné**, **Coach hygiène de vie** et 
 
 > Anciennes versions :
 > v1 (Nova et Atlas) <https://github.com/PaulDecat/Rocket/archive/2ccb6165a41820e973bcd36aa1c50007151c37de.zip> ·
-> v2 <https://github.com/PaulDecat/Rocket/archive/640944de63e88e35ca1c1138c063e504ddbdcd4b.zip>
+> v2 <https://github.com/PaulDecat/Rocket/archive/640944de63e88e35ca1c1138c063e504ddbdcd4b.zip> ·
+> v3 <https://github.com/PaulDecat/Rocket/archive/9bd3d1d.zip>
 
 ---
 
@@ -28,7 +29,8 @@ Rocket a aussi des onglets **Cuisine**, **Ciné**, **Coach hygiène de vie** et 
 - **Autre méthode** : dans le terminal du dossier, tapez `npm start`, puis ouvrez **Chrome** ou **Edge** à
   l'adresse <http://localhost:3000>.
 
-Choisissez votre style, puis cliquez sur **▶ Lancer le morning**. Pour arrêter : fermez la fenêtre noire,
+Choisissez votre style, puis cliquez sur **🚀 Démarrer Rocket**. La matinale **ne se lance pas toute seule** :
+dites « Ok Rocket, lance la matinale, s'il te plaît » (ou appuyez sur ▶). Pour arrêter : fermez la fenêtre noire,
 ou appuyez sur `Ctrl + C` dedans.
 
 ---
@@ -64,10 +66,20 @@ La règle vaut aussi pour la barre de texte.
 - Si le navigateur ne renvoie aucun texte, Rocket bascule tout seul sur le moteur local, sans que vous ayez à
   répéter. Vous pouvez aussi choisir le moteur dans ⚙ → **Reconnaissance vocale**.
 
+- Rocket comprend aussi « Ok **roquette** » : la reconnaissance vocale écrit souvent « roquette », il sait que
+  c'est lui (« une salade de roquette » reste une salade).
+- **Plusieurs questions** : après chaque réponse à une demande vocale, PARLER redevient rouge quelques secondes
+  pour la question suivante. Vous pouvez aussi poser plusieurs questions d'un coup : « Ok Rocket, quelle heure
+  est-il et quel temps fait-il à Lyon, s'il te plaît ».
+
 ### Exemples (toujours avec « Ok Rocket … s'il te plaît »)
 
+- **Toutes vos questions** (avec Claude, voir partie 5) : « pourquoi le ciel est bleu », « explique-moi la
+  photosynthèse », « traduis bonjour en japonais », « qui a gagné la Coupe du monde 2018 »
+- **Sans Claude** : « quelle heure est-il », « quel jour sommes-nous », « combien font 15 pour cent de 80 »,
+  « quel temps fait-il à Lyon demain », « qui est Victor Hugo », « c'est quoi la photosynthèse », « raconte une blague »
+- **Matinale** : « lance la matinale », « reprends la matinale », « suivant », « stop »
 - **Marchés** : « comment va le bitcoin », « quel est le gros coup du jour », « montre-moi le CDS à 5 ans de la France »
-- **Briefing** : « reprends le briefing », « suivant », « stop »
 - **Onglets** : « ouvre la cuisine », « affiche le planning », « affiche la politique », « affiche la bourse »
 - **Planning** : « ajoute dentiste demain à 15 heures », « note réunion avec Paul lundi à 9 heures 30 »,
   « qu'est-ce que j'ai demain », « mon agenda de la semaine », « supprime le dentiste »
@@ -96,10 +108,11 @@ Votre planning et vos habitudes restent **dans votre navigateur** (rien n'est en
 
 ---
 
-## 5. Donner plus d'intelligence à Rocket avec Claude (recommandé)
+## 5. Pour que Rocket réponde à tout : Claude (fortement recommandé)
 
-Sans Claude, Rocket répond aux demandes ci-dessus. Avec Claude, il peut **chercher sur le web**
-(CDS, inflation, une entreprise, une recette originale…).
+Sans Claude, Rocket gère les marchés, l'heure, la date, les calculs, la météo, les définitions et
+personnalités (Wikipédia) et les commandes de l'appli. **Pour répondre à n'importe quelle question**
+(sciences, histoire, conseils, traductions, actualité…), il a besoin de Claude :
 
 1. Dans un terminal : `npm install -g @anthropic-ai/claude-code` (sur Mac, ajoutez `sudo` devant si « EACCES »).
 2. Tapez `claude`, connectez-vous à votre compte, puis tapez `/exit`.
@@ -109,6 +122,7 @@ Autre possibilité : une clé API Anthropic dans un fichier `.env` (voir `.env.e
 
 ## 6. Voix, musique, téléphone
 
+- **Météo** : indiquez votre ville dans ⚙ → « Votre ville » (Paris par défaut).
 - **Voix** : voix Microsoft gratuites (Internet nécessaire), sinon voix du navigateur. Réglages ⚙ : voix de
   Rocket et vitesse.
 - **Musique Deezer** : sur Mac dans l'appli Deezer ; sur Windows dans le lecteur intégré (souvent des extraits

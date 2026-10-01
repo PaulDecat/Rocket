@@ -100,10 +100,19 @@ function lanIp() {
       assert.ok(/démo/.test(await page.textContent('#splashStatus')));
     });
 
-    await test('lancement : le podcast avance avec Rocket seul, les visuels changent', async () => {
+    await test('démarrage : la matinale ne se lance pas toute seule', async () => {
       await page.click('.theme-card[data-theme-id="clean"]');
       await page.click('#startBtn');
       await page.waitForFunction(() => document.getElementById('splash').hidden);
+      await page.waitForTimeout(1500);
+      assert.strictEqual(await page.evaluate(() => RocketApp.state.playing), false);
+      await page.waitForFunction(() => /lance la matinale/.test(document.getElementById('subText').textContent), null, { timeout: 15000 });
+    });
+
+    await test('« Ok Rocket, lance la matinale, s’il te plaît » : Rocket seul, les visuels changent', async () => {
+      await page.fill('#askInput', "Ok roquette, lance la matinale, s'il te plaît");
+      await page.press('#askInput', 'Enter');
+      await page.waitForFunction(() => RocketApp.state.playing, null, { timeout: 15000 });
       const seen = new Set(), visuals = new Set();
       for (let i = 0; i < 6; i++) {
         seen.add(await page.textContent('#subSpeaker'));
@@ -213,14 +222,40 @@ function lanIp() {
       assert.deepStrictEqual(await st(), { talk: false, lock: false });
     });
 
-    await test('voix : « Parler » puis « Ok Rocket, ouvre la cuisine, s’il te plaît »', async () => {
+    await test('voix : plusieurs questions à la suite, « roquette » compris comme « Rocket »', async () => {
       await page.click('#talkBtn');
-      await page.evaluate(() => window.__say("Ok Rocket, ouvre la cuisine, s'il te plaît"));
+      await page.evaluate(() => window.__say("Ok roquette, ouvre la cuisine, s'il te plaît"));
       await page.waitForFunction(() => RocketApp.state.view === 'cuisine', null, { timeout: 8000 });
-      assert.ok(!(await page.evaluate(() => document.getElementById('talkBtn').classList.contains('pressed'))), 'le bouton revient à son état initial');
+      // Après la réponse, Rocket réécoute tout seul pour la question suivante.
+      await page.waitForFunction(() => document.getElementById('talkBtn').classList.contains('pressed') && /Une autre question/.test(document.getElementById('subText').textContent), null, { timeout: 15000 });
+      await page.evaluate(() => window.__say("Ok Rocket, combien font 12 fois 7, s'il te plaît"));
+      await page.waitForFunction(() => RocketApp.state.history.some((h) => /Cela fait 84/.test(h.a)), null, { timeout: 15000 });
+      await page.waitForFunction(() => document.getElementById('talkBtn').classList.contains('pressed'), null, { timeout: 15000 });
+      await page.evaluate(() => window.__say("Ok Rocket, ouvre le coach, s'il te plaît"));
+      await page.waitForFunction(() => RocketApp.state.view === 'coach', null, { timeout: 15000 });
+      // Sans nouvelle question, le bouton revient à son état initial.
+      await page.waitForFunction(() => !document.getElementById('talkBtn').classList.contains('pressed'), null, { timeout: 20000 });
+    });
+
+    await test('plusieurs questions dans une même phrase + questions générales', async () => {
+      await page.fill('#askInput', "Ok Rocket, quelle heure est-il et comment va le CAC 40, s'il te plaît");
+      await page.press('#askInput', 'Enter');
+      await page.waitForFunction(() => /Il est \d+ heure/.test(document.getElementById('subText').textContent) && /CAC 40 est à/.test(document.getElementById('subText').textContent), null, { timeout: 15000 });
+      await page.fill('#askInput', "Ok Rocket, calcule 15 pour cent de 80, s'il te plaît");
+      await page.press('#askInput', 'Enter');
+      await page.waitForFunction(() => /Cela fait 12/.test(document.getElementById('subText').textContent), null, { timeout: 15000 });
+      await page.fill('#askInput', "Ok Rocket, raconte une blague, s'il te plaît");
+      await page.press('#askInput', 'Enter');
+      await page.waitForFunction(() => /\?/.test(document.getElementById('subText').textContent), null, { timeout: 15000 });
+    });
+
+    await test('questions envoyées rapidement : aucune n’est perdue', async () => {
+      await page.evaluate(() => { RocketApp.ask('quelle heure est-il'); RocketApp.ask('combien font 2 plus 3'); });
+      await page.waitForFunction(() => /Cela fait 5/.test(document.getElementById('subText').textContent), null, { timeout: 20000 });
     });
 
     await test('voix en écoute continue : seules les phrases « Ok Rocket … s’il te plaît » sont exécutées', async () => {
+      await page.waitForFunction(() => !RocketApp.state.asking && !Listen.capturing, null, { timeout: 20000 });
       await page.click('#lockBtn');
       await page.evaluate(() => window.__say('comment va le bitcoin'));
       await page.waitForTimeout(400);
@@ -368,7 +403,8 @@ function lanIp() {
     const OPERA_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 OPR/112.0.0.0 (Edition Yx GX)';
     const fakeWhisper = (phrase) => (p) => p.addInitScript((t) => {
       window.__sttCalls = 0;
-      window.__STT_FAKE = (audio) => { window.__sttCalls++; window.__lastAudioLen = audio.length; return t; };
+      // La première phrase est la commande ; ensuite, le faux micro ne « dit » plus rien de compréhensible.
+      window.__STT_FAKE = (audio) => { window.__sttCalls++; if (window.__sttCalls === 1) window.__lastAudioLen = audio.length; return window.__sttCalls === 1 ? t : ''; };
     }, phrase);
     const mutedSR = () => (ctx) => ctx.addInitScript(() => {
       // API présente mais muette, comme dans Opera GX.
@@ -397,7 +433,8 @@ function lanIp() {
       await p.waitForFunction(() => RocketApp.state.view === 'coach', null, { timeout: 15000 });
       const len = await p.evaluate(() => window.__lastAudioLen);
       assert.ok(len > 16000 * 0.8 && len < 16000 * 4, `durée transmise : ${len / 16000} s`);
-      assert.ok(!(await p.evaluate(() => document.getElementById('talkBtn').classList.contains('pressed'))));
+      // Rocket réécoute pour une autre question, puis relâche le bouton faute de demande.
+      await p.waitForFunction(() => !document.getElementById('talkBtn').classList.contains('pressed'), null, { timeout: 30000 });
       await c.close();
     });
 

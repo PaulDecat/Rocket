@@ -35,7 +35,7 @@
       <p class="splash-rule">Pour parler à Rocket : « <b>Ok Rocket</b>, votre demande, <b>s'il te plaît</b> »</p>
       <p class="splash-label">Choisissez votre style</p>
       <div class="theme-cards" id="themeCards" role="radiogroup" aria-label="Style de l'interface"></div>
-      <button id="startBtn" class="btn-primary" type="button">▶ Lancer le morning</button>
+      <button id="startBtn" class="btn-primary" type="button">🚀 Démarrer Rocket</button>
       <p id="splashStatus" class="splash-status" aria-live="polite">Chargement des marchés…</p>
     </div>
   </div>
@@ -131,7 +131,7 @@
 
       <section class="subtitles" aria-live="polite">
         <div id="subSpeaker" class="sub-speaker">ROCKET</div>
-        <div id="subText" class="sub-text">Appuyez sur « Lancer le morning » pour commencer.</div>
+        <div id="subText" class="sub-text">Appuyez sur « Démarrer Rocket » pour commencer.</div>
         <div class="sub-rule">« <b>Ok Rocket</b> … <b>s'il te plaît</b> »</div>
       </section>
     </section>
@@ -196,6 +196,9 @@
         <span class="set-inline"><input id="deezerUser" type="text" placeholder="https://www.deezer.com/fr/profile/…"><button type="button" class="btn-ghost" id="deezerCheck">Vérifier</button></span>
       </label>
       <p id="deezerStatus" class="set-note">Deezer → votre profil → Partager → Copier le lien.</p>
+      <label class="set-row">Votre ville (pour la météo)
+        <input id="citySel" type="text" placeholder="Paris" maxlength="60">
+      </label>
       <label class="set-row">Reconnaissance vocale
         <select id="sttSel">
           <option value="auto">Automatique (recommandé)</option>

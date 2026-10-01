@@ -163,6 +163,7 @@
   }
 
   function feed(text, final) {
+    text = Command.normalize(text); // « roquette » → « Rocket »
     if (st.capture) {
       const c = st.capture;
       const full = (c.text + ' ' + text).trim();
