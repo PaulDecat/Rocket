@@ -61,12 +61,17 @@ async function buildBriefing() {
   };
 }
 
-async function getBriefing(refresh) {
-  if (!refresh && cache && Date.now() - cache.generatedAt < TTL) return cache;
-  if (!pending) {
-    pending = buildBriefing().then((b) => { cache = b; return b; }).finally(() => { pending = null; });
-  }
+function rebuild() {
+  if (!pending) pending = buildBriefing().then((b) => { cache = b; return b; }).finally(() => { pending = null; });
   return pending;
+}
+
+// Données périmées : on répond tout de suite avec la version en mémoire et on actualise en arrière-plan
+// (une question à Rocket n'attend jamais le rechargement des cours).
+async function getBriefing(refresh) {
+  if (refresh || !cache) return rebuild();
+  if (Date.now() - cache.generatedAt >= TTL) rebuild().catch(() => {});
+  return cache;
 }
 
 // ---------- Utilitaires HTTP ----------

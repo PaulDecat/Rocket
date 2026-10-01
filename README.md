@@ -1,4 +1,4 @@
-# 🚀 Rocket v4 — votre assistant personnel
+# 🚀 Rocket v5 — votre assistant personnel
 
 Rocket répond à **toutes vos questions**, à la voix. Et quand vous le lui demandez, il vous lit un point complet : Bourses, taux et devises, matières premières, radar
 investissement, actualité économique et politique, votre agenda du jour, une idée de recette et un conseil
@@ -10,6 +10,7 @@ Rocket a aussi des onglets **Cuisine**, **Ciné**, **Coach hygiène de vie** et 
 > Anciennes versions :
 > v1 (Nova et Atlas) <https://github.com/PaulDecat/Rocket/archive/2ccb6165a41820e973bcd36aa1c50007151c37de.zip> ·
 > v2 <https://github.com/PaulDecat/Rocket/archive/640944de63e88e35ca1c1138c063e504ddbdcd4b.zip> ·
+> v4 <https://github.com/PaulDecat/Rocket/archive/3918e77b2443a52b758a2cb2b61d3c6ab35eed48.zip> ·
 > v3 <https://github.com/PaulDecat/Rocket/archive/ef08f62621873e912bee1cfe21348f41bee582d3.zip>
 
 ---
@@ -120,7 +121,18 @@ personnalités (Wikipédia) et les commandes de l'appli. **Pour répondre à n'i
 
 Autre possibilité : une clé API Anthropic dans un fichier `.env` (voir `.env.example`).
 
-## 6. Voix, musique, téléphone
+## 6. Rapidité (nouveau dans la v5)
+
+- Rocket **commence à parler dès la première phrase** de sa réponse, pendant que Claude écrit la suite
+  (environ 2 secondes au lieu d'attendre la réponse entière).
+- La voix est préparée **phrase par phrase** : la phrase suivante est prête pendant qu'il dit la précédente.
+- Les cours de Bourse sont rafraîchis **en arrière-plan** : une question n'attend jamais leur rechargement.
+- Opera GX, Brave, Firefox : le moteur vocal local est **préparé dès le démarrage**, et la fin de votre phrase
+  est détectée plus vite.
+- Claude utilise un réglage rapide, adapté à la voix. Pour des réponses plus approfondies (mais plus lentes),
+  voir `ROCKET_CLAUDE_MODEL` et `ROCKET_CLAUDE_EFFORT` dans `.env.example`.
+
+## 7. Voix, musique, téléphone
 
 - **Météo** : indiquez votre ville dans ⚙ → « Votre ville » (Paris par défaut).
 - **Voix** : voix Microsoft gratuites (Internet nécessaire), sinon voix du navigateur. Réglages ⚙ : voix de
@@ -131,7 +143,7 @@ Autre possibilité : une clé API Anthropic dans un fichier `.env` (voir `.env.e
   Par sécurité, les demandes à Rocket restent réservées à l'ordinateur. Pour l'utiliser partout : déploiement
   sur [Render](https://render.com) avec le fichier `render.yaml`.
 
-## 7. En cas de problème
+## 8. En cas de problème
 
 | Problème | Solution |
 |---|---|

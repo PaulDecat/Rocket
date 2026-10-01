@@ -72,7 +72,7 @@
     return out;
   }
 
-  // Détection de la parole : appelle onSegment(audio 16 kHz) à chaque phrase (fin = 0,8 s de silence).
+  // Détection de la parole : appelle onSegment(audio 16 kHz) à chaque phrase (fin = 0,6 s de silence).
   function startSegments(onSegment, { onSpeechStart, isMuted } = {}) {
     stopSegments();
     if (!mic.ctx) return;
@@ -100,7 +100,7 @@
       buf.push(copy);
       silenceMs = loud ? 0 : silenceMs + blockMs;
       const dur = buf.length * blockMs;
-      if (silenceMs >= 800 || dur >= 12000) {
+      if (silenceMs >= 600 || dur >= 12000) {
         speaking = false; speechMs = 0;
         const audio = downsample(buf, rate);
         buf = [];

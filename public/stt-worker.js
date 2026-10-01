@@ -25,6 +25,9 @@ function load() {
       catch (e) { asr = null; }
     }
     if (!asr) asr = await make(MODEL_WASM, 'wasm', 'q8');
+    // Échauffement : la toute première transcription est lente (compilation) ; on la fait tout de suite
+    // sur une demi-seconde de silence, pour que votre première vraie phrase soit rapide.
+    try { await asr(new Float32Array(8000), { language: 'french', task: 'transcribe' }); } catch (e) { /* ignore */ }
     self.postMessage({ type: 'ready' });
     return asr;
   })();

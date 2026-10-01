@@ -116,11 +116,11 @@
   function prepareLocal() {
     if (localPrepared) return;
     localPrepared = true;
-    emit('status', 'Préparation du moteur vocal local…');
+    if (active()) emit('status', 'Préparation du moteur vocal local…');
     LocalSTT.load((p) => {
       const pct = Math.round((p.loaded / p.total) * 100);
       emit('status', `Téléchargement du moteur vocal (une seule fois) : ${pct} %`);
-    }).then(() => emit('status', 'Moteur vocal prêt. Parlez, Monsieur.'))
+    }).then(() => { if (active()) emit('status', 'Moteur vocal prêt. Parlez, Monsieur.'); })
       .catch((e) => { localPrepared = false; emit('error', "Le moteur vocal local n'a pas pu se charger (" + e.message + '). Vérifiez la connexion Internet, ou ouvrez Rocket dans Chrome ou Edge.'); });
   }
 
@@ -259,10 +259,13 @@
 
   function init(handlers) { st.handlers = handlers || {}; }
 
+  // Au démarrage de Rocket : le moteur local (Opera, Brave, Firefox…) est préparé à l'avance.
+  function warm() { if (engine() === 'local') prepareLocal(); }
+
   window.Listen = {
     // Le micro fonctionne si on peut l'ouvrir : le moteur local prend le relais du navigateur.
     supported: !!(window.Mic && Mic.supported) || !!SR,
-    init, once, cancel, setLatched, setPref, beep,
+    init, once, cancel, setLatched, setPref, beep, warm,
     get latched() { return st.latched; },
     get capturing() { return !!st.capture; },
     get engine() { return engine(); },

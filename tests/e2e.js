@@ -21,10 +21,10 @@ async function test(name, fn) {
   try { await fn(); n++; console.log('  ✓ ' + name); } catch (e) { failed++; console.error('  ✗ ' + name + '\n    ' + (e && e.stack ? e.stack.split('\n').slice(0, 3).join('\n    ') : e)); }
 }
 
-function startServer() {
+function startServer(port = PORT, extraEnv = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
-      env: { ...process.env, PORT: String(PORT), ASSISTANT: 'local', TTS_PROVIDER: 'browser', ROCKET_OFFLINE: '1' },
+      env: { ...process.env, PORT: String(port), ASSISTANT: 'local', TTS_PROVIDER: 'browser', ROCKET_OFFLINE: '1', ...extraEnv },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let out = '';
@@ -182,7 +182,7 @@ function lanIp() {
 
     await test('« Ok Rocket, comment va le CAC 40, s’il te plaît » : réponse + courbe', async () => {
       await typeCommand("Ok Rocket, comment va le CAC 40, s'il te plaît");
-      await page.waitForFunction(() => /CAC 40 est à/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
+      await page.waitForFunction(() => RocketApp.state.history.some((h) => /CAC 40 est à/.test(h.a)), null, { timeout: 8000 });
       assert.deepStrictEqual(await page.evaluate(() => RocketApp.state.visual), { type: 'line', symbol: '^FCHI' });
     });
 
@@ -240,7 +240,7 @@ function lanIp() {
     await test('plusieurs questions dans une même phrase + questions générales', async () => {
       await page.fill('#askInput', "Ok Rocket, quelle heure est-il et comment va le CAC 40, s'il te plaît");
       await page.press('#askInput', 'Enter');
-      await page.waitForFunction(() => /Il est \d+ heure/.test(document.getElementById('subText').textContent) && /CAC 40 est à/.test(document.getElementById('subText').textContent), null, { timeout: 15000 });
+      await page.waitForFunction(() => RocketApp.state.history.some((h) => /Il est \d+ heure/.test(h.a) && /CAC 40 est à/.test(h.a)), null, { timeout: 15000 });
       await page.fill('#askInput', "Ok Rocket, calcule 15 pour cent de 80, s'il te plaît");
       await page.press('#askInput', 'Enter');
       await page.waitForFunction(() => /Cela fait 12/.test(document.getElementById('subText').textContent), null, { timeout: 15000 });
@@ -262,7 +262,7 @@ function lanIp() {
       assert.strictEqual(await page.evaluate(() => RocketApp.state.asking), false);
       await page.evaluate(() => window.__say('Ok Rocket, comment va le bitcoin'));
       await page.evaluate(() => window.__say("s'il te plaît"));
-      await page.waitForFunction(() => /bitcoin est à/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
+      await page.waitForFunction(() => RocketApp.state.history.some((h) => /bitcoin est à/.test(h.a)), null, { timeout: 8000 });
       assert.ok(await page.evaluate(() => document.getElementById('talkBtn').classList.contains('pressed')), '« Parler » reste enfoncé');
       await page.click('#lockBtn');
       await page.click('.tab[data-view="briefing"]');
@@ -491,6 +491,45 @@ function lanIp() {
   });
 
   if (errors.length) { failed++; console.error('  ✗ erreurs JavaScript dans la page :\n    ' + errors.join('\n    ')); }
+  // ---------- v5 : réponse en flux (faux Claude lent) ----------
+  const FAST_PORT = PORT + 1;
+  const fastServer = await startServer(FAST_PORT, { ROCKET_FAKE_CLAUDE: '1' });
+  const fb = await chromium.launch({ args: micArgs(SILENCE_WAV) });
+  try {
+    await test('rapidité : Rocket commence à parler avant la fin de la réponse de Claude', async () => {
+      const c = await fb.newContext({ viewport: { width: 1280, height: 860 } });
+      const p = await c.newPage();
+      p.on('pageerror', (e) => errors.push(e.message));
+      await p.goto(`http://localhost:${FAST_PORT}`);
+      await p.waitForFunction(() => /prêt/.test(document.getElementById('splashStatus').textContent));
+      await p.click('#startBtn');
+      await p.waitForFunction(() => document.getElementById('splash').hidden);
+      // On remplace la voix par une voix factice qui note l'ordre des phrases.
+      await p.evaluate(() => {
+        window.__spoken = [];
+        Voice.speak = (t, cb) => { window.__spoken.push({ t, at: performance.now() }); return new Promise((r) => setTimeout(() => { cb && cb(1); r(true); }, 400)); };
+      });
+      const t0 = await p.evaluate(() => performance.now());
+      await p.fill('#askInput', "Ok Rocket, pourquoi le ciel est bleu et quelle heure est-il, s'il te plaît");
+      await p.press('#askInput', 'Enter');
+      // La 1re phrase est dite alors que la réponse complète n'est pas encore arrivée.
+      await p.waitForFunction(() => window.__spoken.some((x) => /première phrase/.test(x.t)), null, { timeout: 5000 });
+      const st = await p.evaluate(() => ({ asking: RocketApp.state.asking, at: window.__spoken[0].at }));
+      assert.ok(st.asking, 'la réponse était encore en cours');
+      console.log(`    (première phrase dite après ${((st.at - t0) / 1000).toFixed(2)} s ; réponse complète après ~7,5 s)`);
+      await p.waitForFunction(() => !RocketApp.state.asking && window.__spoken.some((x) => /Il est \d+ heure/.test(x.t)), null, { timeout: 20000 });
+      const order = await p.evaluate(() => window.__spoken.map((x) => x.t));
+      assert.deepStrictEqual(order.length, 4, order.join(' | '));
+      assert.ok(/première/.test(order[0]) && /deuxième/.test(order[1]) && /troisième/.test(order[2]) && /Il est/.test(order[3]), order.join(' | '));
+      assert.ok(!order.some((x) => /VISUEL/.test(x)), 'la consigne de graphique n’est jamais lue');
+      assert.strictEqual(await p.evaluate(() => RocketApp.state.visual && RocketApp.state.visual.type), 'figure');
+      await c.close();
+    });
+  } finally {
+    await fb.close();
+    fastServer.kill();
+  }
+
   server.kill();
   console.log(`\n${n} test(s) de bout en bout réussis${failed ? `, ${failed} échec(s)` : ''}.`);
   process.exit(failed ? 1 : 0);

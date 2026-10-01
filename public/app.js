@@ -15,7 +15,7 @@
     config: null, briefing: null, bySym: {}, script: [], chapters: [],
     idx: 0, playing: false, paused: false, runToken: 0, resumeWait: null,
     view: 'briefing', visual: null, prevVisual: null, detail: null,
-    history: [], asking: false, coreState: 'idle', host: null, mini: 'bourse', autoPaused: false, micErrorAt: 0, queue: [], fromVoice: false,
+    history: [], asking: false, coreState: 'idle', host: null, mini: 'bourse', autoPaused: false, micErrorAt: 0, queue: [], fromVoice: false, talkId: 0,
     intradayCache: new Map(), started: false,
   };
 
@@ -677,16 +677,85 @@
     if (tab === 'briefing' || tab === 'radar' || PAGES.includes(tab)) setView(tab);
   }
 
+  // ---------- Parole phrase par phrase ----------
+  // Le texte arrive (en flux ou d'un coup) ; Rocket commence à parler dès la première phrase complète
+  // et prépare la voix de la phrase suivante pendant qu'il parle.
+  function nextSentence(buf, final) {
+    const re = /[.!?…]+["»”)]*(\s+|$)/g;
+    let m;
+    while ((m = re.exec(buf))) {
+      const end = m.index + m[0].length;
+      // Pas de coupure sur « 3.5 » ou une phrase minuscule (« M. »).
+      if (end < buf.length || final || m[1]) {
+        if (end >= 12 || final) return [buf.slice(0, end).trim(), buf.slice(end)];
+      }
+    }
+    if (buf.length > 220) { // phrase très longue : on coupe à une virgule
+      const c = buf.lastIndexOf(', ', 200);
+      if (c > 60) return [buf.slice(0, c + 1).trim(), buf.slice(c + 2)];
+    }
+    if (final && buf.trim()) return [buf.trim(), ''];
+    return null;
+  }
+
+  function createTalker() {
+    const id = ++S.talkId;
+    let buf = '', ended = false, busy = false, cancelled = false, started = false;
+    const queue = [];
+    const said = []; // phrases déjà dites (affichées au-dessus de la phrase en cours)
+    let resolveDone;
+    const done = new Promise((r) => { resolveDone = r; });
+    const alive = () => !cancelled && id === S.talkId;
+    function cut() {
+      let r;
+      while ((r = nextSentence(buf, ended))) {
+        if (r[0]) { queue.push(r[0]); if (busy && queue.length === 1) Voice.prefetch(r[0]); }
+        buf = r[1];
+      }
+    }
+    async function pump() {
+      if (busy) return;
+      if (!alive()) { finish(false); return; }
+      if (!queue.length) { if (ended) finish(true); return; }
+      busy = true;
+      const sentence = queue.shift();
+      if (!started) { started = true; setHost('rocket'); setCore('speaking'); }
+      if (queue[0]) Voice.prefetch(queue[0]);
+      // Sous-titres : la réponse s'affiche au fur et à mesure (4 dernières phrases), mot en cours surligné.
+      const before = said.slice(-3).join(' ');
+      const shown = before ? before + ' ' + sentence : sentence;
+      const pre = before ? before.length + 1 : 0;
+      setSubtitle(shown);
+      setSubProgress(pre / shown.length);
+      const ok = await Voice.speak(sentence, (f) => setSubProgress((pre + f * sentence.length) / shown.length));
+      said.push(sentence);
+      busy = false;
+      if (!ok || !alive()) { cancelled = true; finish(false); return; }
+      pump();
+    }
+    let finished = false;
+    function finish(ok) {
+      if (finished) return;
+      finished = true;
+      if (id === S.talkId) { setHost(null); if (S.coreState === 'speaking') setCore('idle'); }
+      resolveDone(ok);
+    }
+    return {
+      push(t) { if (finished) return; buf += t; cut(); pump(); },
+      end() { ended = true; cut(); pump(); },
+      cancel() { cancelled = true; finish(false); },
+      get started() { return started || queue.length > 0 || busy; },
+      done,
+    };
+  }
+
   // Lit un texte avec la voix de Rocket (hors podcast).
   async function sayText(text) {
     if (S.playing) stopPlayback(); else Voice.stop();
-    setSubtitle(text);
-    setHost('rocket');
-    setCore('speaking');
-    const ok = await Voice.speak(text, setSubProgress);
-    setHost(null);
-    if (S.coreState === 'speaking') setCore('idle');
-    return ok;
+    const t = createTalker();
+    t.push(String(text || ''));
+    t.end();
+    return t.done;
   }
 
   // Règle : « Ok Rocket … s'il te plaît ». Renvoie true si la demande est exécutée.
@@ -717,6 +786,7 @@
     setCore('thinking');
     setStatus('Rocket réfléchit…');
     let result = null;
+    let talker = null; // réponse en flux : Rocket parle avant la fin de la réponse
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 200000);
     try {
@@ -743,7 +813,11 @@
             const line = buf.slice(0, i); buf = buf.slice(i + 1);
             if (!line.trim()) continue;
             let ev; try { ev = JSON.parse(line); } catch (e) { continue; }
-            if (ev.type === 'status') setStatus(ev.text);
+            if (ev.type === 'status' && !(talker && talker.started)) setStatus(ev.text);
+            if (ev.type === 'delta') {
+              if (!talker) { Voice.stop(); talker = createTalker(); }
+              talker.push(ev.text);
+            }
             if (ev.type === 'result') result = ev;
           }
         }
@@ -754,6 +828,7 @@
     }
     clearTimeout(timer);
     S.asking = false;
+    if (talker && !(result && result.streamed)) { talker.cancel(); talker = null; }
     if (!result) result = { answer: SORRY };
     let answer = result.answer || SORRY;
     if (result.music) {
@@ -788,14 +863,18 @@
       S.queue = [];
       return;
     }
+    const speak = (txt) => {
+      if (talker) { const t = talker; talker = null; t.end(); return t.done; }
+      return sayText(txt);
+    };
     if (action === 'play' || action === 'next') {
-      await sayText(answer);
+      await speak(answer);
       // « Lance la matinale » : depuis le début ; « reprends » : là où elle s'était arrêtée.
       const from = action === 'next' ? S.idx + 1 : result.from === 'start' || S.idx >= S.script.length - 1 ? 0 : S.idx;
       run(from);
       return;
     }
-    await sayText(answer);
+    await speak(answer);
     if (S.queue.length) { const [q, o] = S.queue.shift(); ask(q, o); return; }
     // Conversation : après une réponse à une demande vocale, Rocket réécoute pour la question suivante.
     if (opts.voice && !Listen.latched && !Listen.capturing && !S.playing) followUp();
@@ -955,6 +1034,7 @@
     setTimeout(() => { $('splash').hidden = true; }, 400);
     chart.resize();
     drawSparklines();
+    Listen.warm();
     // La matinale ne démarre plus toute seule : Rocket attend vos demandes.
     const hint = "Pour écouter la matinale : « Ok Rocket, lance la matinale, s'il te plaît », ou le bouton ▶.";
     await sayText('Bonjour Monsieur, Rocket est à votre service.');
