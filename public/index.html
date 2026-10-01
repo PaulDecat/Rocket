@@ -111,6 +111,7 @@
           <span class="talk-ico" aria-hidden="true">🎙</span>
           <span class="talk-label">PARLER</span>
           <span class="talk-sub">à Rocket</span>
+          <span class="talk-meter" aria-hidden="true"></span>
         </button>
         <div class="core-wrap">
           <canvas id="core" width="170" height="170" aria-hidden="true"></canvas>
@@ -195,6 +196,14 @@
         <span class="set-inline"><input id="deezerUser" type="text" placeholder="https://www.deezer.com/fr/profile/…"><button type="button" class="btn-ghost" id="deezerCheck">Vérifier</button></span>
       </label>
       <p id="deezerStatus" class="set-note">Deezer → votre profil → Partager → Copier le lien.</p>
+      <label class="set-row">Reconnaissance vocale
+        <select id="sttSel">
+          <option value="auto">Automatique (recommandé)</option>
+          <option value="web">Navigateur (Chrome, Edge)</option>
+          <option value="local">Moteur local (Opera, Opera GX, Brave, Firefox…)</option>
+        </select>
+      </label>
+      <p id="sttInfo" class="set-note">—</p>
       <p class="set-row"><span>Réponses :</span> <b id="aiMode">—</b></p>
       <div class="set-actions"><button class="btn-primary" value="close">Fermer</button></div>
     </form>
@@ -215,6 +224,7 @@
   <script src="/hud-bg.js"></script>
   <script src="/charts.js"></script>
   <script src="/voice.js"></script>
+  <script src="/stt.js"></script>
   <script src="/listen.js"></script>
   <script src="/music.js"></script>
   <script src="/views.js"></script>

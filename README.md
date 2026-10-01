@@ -1,4 +1,4 @@
-# 🚀 Rocket v2 — votre assistant du matin
+# 🚀 Rocket v3 — votre assistant du matin
 
 Chaque matin, **Rocket** vous lit un point complet : Bourses, taux et devises, matières premières, radar
 investissement, actualité économique et politique, votre agenda du jour, une idée de recette et un conseil
@@ -7,8 +7,9 @@ bien-être. Des graphiques s'affichent pendant qu'il parle.
 Rocket a aussi des onglets **Cuisine**, **Ciné**, **Coach hygiène de vie** et **Planning**, et vous pouvez
 **lui parler**.
 
-> La version 1 (avec Nova et Atlas) reste disponible :
-> <https://github.com/PaulDecat/Rocket/archive/2ccb6165a41820e973bcd36aa1c50007151c37de.zip>
+> Anciennes versions :
+> v1 (Nova et Atlas) <https://github.com/PaulDecat/Rocket/archive/2ccb6165a41820e973bcd36aa1c50007151c37de.zip> ·
+> v2 <https://github.com/PaulDecat/Rocket/archive/640944de63e88e35ca1c1138c063e504ddbdcd4b.zip>
 
 ---
 
@@ -22,7 +23,8 @@ Rocket a aussi des onglets **Cuisine**, **Ciné**, **Coach hygiène de vie** et 
 
 ## 2. Lancer Rocket
 
-- **Windows** : double-cliquez sur **`Lancer Rocket.bat`** (il ouvre aussi la page dans le navigateur).
+- **Windows** : double-cliquez sur **`Lancer Rocket.bat`**. Dès que Rocket est prêt, il s'ouvre tout seul
+  dans **Chrome** (ou **Edge** si Chrome n'est pas installé), les navigateurs où le micro est le plus rapide.
 - **Autre méthode** : dans le terminal du dossier, tapez `npm start`, puis ouvrez **Chrome** ou **Edge** à
   l'adresse <http://localhost:3000>.
 
@@ -49,7 +51,18 @@ La règle vaut aussi pour la barre de texte.
 | 🎙 **PARLER** | Appuyez une fois : il devient **rouge**, Rocket écoute votre demande. Il revient à son état initial après la demande. Réappuyez pour annuler. |
 | 🔓 **MAINTENIR** | Appuyez : il devient **orange** 🔒 et garde **PARLER enfoncé** : Rocket écoute en continu. Réappuyez sur MAINTENIR : PARLER retrouve son état initial. |
 
-Le micro fonctionne dans **Chrome** ou **Edge** (autorisez le micro quand le navigateur le demande).
+### Le micro (nouveau dans la v3)
+
+- Au premier appui, le navigateur demande l'accès au micro : cliquez sur **Autoriser**.
+- Quand PARLER est rouge, une **barre blanche** en bas du bouton bouge avec votre voix : c'est la preuve que
+  le micro vous entend.
+- **Chrome et Edge** utilisent leur propre reconnaissance vocale (rapide).
+- **Opera, Opera GX, Brave, Firefox…** n'ont pas de reconnaissance vocale qui fonctionne. Rocket utilise alors
+  son **moteur vocal local** (Whisper), qui tourne directement dans le navigateur. La **première fois**, il
+  télécharge environ **80 Mo** (une barre de progression s'affiche), ensuite c'est instantané. Comptez 1 à 3
+  secondes de transcription par phrase.
+- Si le navigateur ne renvoie aucun texte, Rocket bascule tout seul sur le moteur local, sans que vous ayez à
+  répéter. Vous pouvez aussi choisir le moteur dans ⚙ → **Reconnaissance vocale**.
 
 ### Exemples (toujours avec « Ok Rocket … s'il te plaît »)
 
@@ -112,7 +125,9 @@ Autre possibilité : une clé API Anthropic dans un fichier `.env` (voir `.env.e
 | « EADDRINUSE » | Rocket tourne déjà : fermez l'autre fenêtre (Mac : `lsof -ti :3000 \| xargs kill`). |
 | `npm` n'est pas reconnu | Installez Node.js, puis fermez et rouvrez le terminal. |
 | Pastille **DÉMO** | Sources injoignables : données de démonstration. Vérifiez Internet puis cliquez sur ⟳. |
-| Le micro ne marche pas | Chrome ou Edge, micro autorisé (icône du cadenas dans la barre d'adresse). |
+| PARLER est rouge mais la barre blanche ne bouge pas | Le micro ne capte rien : vérifiez qu'il est branché, choisi par Windows (Paramètres → Son → Entrée), et autorisé dans le navigateur (icône du cadenas dans la barre d'adresse). |
+| La barre bouge mais rien ne s'écrit | Patientez la première fois (téléchargement du moteur local). Sinon, ⚙ → Reconnaissance vocale → « Moteur local ». |
+| « Le micro est déjà utilisé » | Fermez Discord, Teams ou toute appli qui utilise le micro. |
 | Pas de son | Cliquez d'abord sur « Lancer le morning » (les navigateurs exigent un clic). |
 
 ---

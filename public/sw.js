@@ -1,7 +1,7 @@
 'use strict';
 // Service worker : réseau d'abord, cache de secours (jamais pour /api/).
-const CACHE = 'rocket-v2';
-const CORE = ['/', '/index.html', '/style.css', '/themes.js', '/hud-bg.js', '/charts.js', '/voice.js', '/listen.js', '/music.js', '/command.js', '/views.js', '/app.js', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
+const CACHE = 'rocket-v3';
+const CORE = ['/', '/index.html', '/style.css', '/themes.js', '/hud-bg.js', '/charts.js', '/voice.js', '/stt.js', '/stt-worker.js', '/listen.js', '/music.js', '/command.js', '/views.js', '/app.js', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).catch(() => {}).then(() => self.skipWaiting()));

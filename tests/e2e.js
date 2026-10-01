@@ -34,6 +34,29 @@ function startServer() {
   });
 }
 
+// Fichiers WAV servant de faux micro à Chromium : silence, ou « phrases » (bouffées de son).
+function writeWav(file, seconds, burst) {
+  const rate = 48000, n = rate * seconds;
+  const buf = Buffer.alloc(44 + n * 2);
+  buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 2, 4); buf.write('WAVE', 8); buf.write('fmt ', 12);
+  buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22); buf.writeUInt32LE(rate, 24);
+  buf.writeUInt32LE(rate * 2, 28); buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34); buf.write('data', 36); buf.writeUInt32LE(n * 2, 40);
+  let seed = 1;
+  for (let i = 0; i < n; i++) {
+    const t = i / rate;
+    // 1,5 s de « voix » (son modulé) puis 1,5 s de silence.
+    const on = burst && (t % 3) < 1.5;
+    seed = (seed * 16807) % 2147483647;
+    const v = on ? 0.35 * Math.sin(2 * Math.PI * 220 * t) * (0.6 + 0.4 * Math.sin(2 * Math.PI * 4 * t)) + 0.05 * (seed / 2147483647 - 0.5) : 0;
+    buf.writeInt16LE(Math.round(Math.max(-1, Math.min(1, v)) * 32767), 44 + i * 2);
+  }
+  require('fs').writeFileSync(file, buf);
+  return file;
+}
+const SILENCE_WAV = writeWav(path.join(os.tmpdir(), 'rocket-silence.wav'), 4, false);
+const SPEECH_WAV = writeWav(path.join(os.tmpdir(), 'rocket-speech.wav'), 6, true);
+const micArgs = (wav) => ['--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${wav}`];
+
 function lanIp() {
   for (const list of Object.values(os.networkInterfaces())) for (const i of list || []) if (i.family === 'IPv4' && !i.internal) return i.address;
   return null;
@@ -41,7 +64,7 @@ function lanIp() {
 
 (async () => {
   const server = await startServer();
-  const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+  const browser = await chromium.launch({ args: micArgs(SILENCE_WAV) });
   const errors = [];
   try {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -210,6 +233,10 @@ function lanIp() {
       await page.click('.tab[data-view="briefing"]');
     });
 
+    await test('micro : l’indicateur de niveau est présent sur « Parler »', async () => {
+      assert.strictEqual(await page.locator('#talkBtn .talk-meter').count(), 1);
+    });
+
     await test('mini-onglets Bourse / Politique', async () => {
       await page.click('.mini-tab[data-mini="politique"]');
       assert.ok(await page.locator('#panePolitique').isVisible());
@@ -333,6 +360,79 @@ function lanIp() {
     });
   } finally {
     await browser.close();
+  }
+
+  // ---------- Micro réel simulé (bouffées de son) : moteur local et bascule automatique ----------
+  const sb = await chromium.launch({ args: micArgs(SPEECH_WAV) });
+  try {
+    const OPERA_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 OPR/112.0.0.0 (Edition Yx GX)';
+    const fakeWhisper = (phrase) => (p) => p.addInitScript((t) => {
+      window.__sttCalls = 0;
+      window.__STT_FAKE = (audio) => { window.__sttCalls++; window.__lastAudioLen = audio.length; return t; };
+    }, phrase);
+    const mutedSR = () => (ctx) => ctx.addInitScript(() => {
+      // API présente mais muette, comme dans Opera GX.
+      window.webkitSpeechRecognition = class { start() { setTimeout(() => this.onstart && this.onstart(), 0); } stop() { setTimeout(() => this.onend && this.onend(), 0); } };
+      window.SpeechRecognition = window.webkitSpeechRecognition;
+    });
+    const launch = async (ua, phrase) => {
+      const c = await sb.newContext({ viewport: { width: 1280, height: 860 }, userAgent: ua });
+      await mutedSR()(c);
+      const p = await c.newPage();
+      await fakeWhisper(phrase)(p);
+      p.on('pageerror', (e) => errors.push(e.message));
+      await p.goto(BASE);
+      await p.waitForFunction(() => /prêt/.test(document.getElementById('splashStatus').textContent));
+      await p.click('#startBtn');
+      await p.waitForFunction(() => document.getElementById('splash').hidden);
+      await p.evaluate(() => RocketApp.stopPlayback());
+      return { c, p };
+    };
+
+    await test('Opera GX : « Parler » utilise le moteur local, le micro capte et la commande s’exécute', async () => {
+      const { c, p } = await launch(OPERA_UA, "Ok Rocket, ouvre le coach, s'il te plaît");
+      assert.strictEqual(await p.evaluate(() => Listen.engine), 'local');
+      await p.click('#talkBtn');
+      await p.waitForFunction(() => parseFloat(getComputedStyle(document.getElementById('talkBtn')).getPropertyValue('--lvl')) > 0.05, null, { timeout: 8000 });
+      await p.waitForFunction(() => RocketApp.state.view === 'coach', null, { timeout: 15000 });
+      const len = await p.evaluate(() => window.__lastAudioLen);
+      assert.ok(len > 16000 * 0.8 && len < 16000 * 4, `durée transmise : ${len / 16000} s`);
+      assert.ok(!(await p.evaluate(() => document.getElementById('talkBtn').classList.contains('pressed'))));
+      await c.close();
+    });
+
+    await test('Opera GX : écoute continue avec « Maintenir »', async () => {
+      const { c, p } = await launch(OPERA_UA, "Ok Rocket, ouvre la cuisine, s'il te plaît");
+      await p.click('#lockBtn');
+      await p.waitForFunction(() => RocketApp.state.view === 'cuisine', null, { timeout: 15000 });
+      assert.ok(await p.evaluate(() => document.getElementById('talkBtn').classList.contains('pressed')));
+      await p.click('#lockBtn');
+      assert.ok(!(await p.evaluate(() => document.getElementById('talkBtn').classList.contains('pressed'))));
+      await c.close();
+    });
+
+    await test('Chrome muet : bascule automatique sur le moteur local sans répéter la phrase', async () => {
+      const { c, p } = await launch(undefined, "Ok Rocket, ouvre le planning, s'il te plaît");
+      assert.strictEqual(await p.evaluate(() => Listen.engine), 'web');
+      await p.click('#talkBtn');
+      await p.waitForFunction(() => RocketApp.state.view === 'planning', null, { timeout: 20000 });
+      await c.close();
+    });
+
+    await test('micro refusé : message clair', async () => {
+      const c = await sb.newContext({ viewport: { width: 1280, height: 860 } });
+      const p = await c.newPage();
+      await p.addInitScript(() => { navigator.mediaDevices.getUserMedia = () => Promise.reject(Object.assign(new Error('refus'), { name: 'NotAllowedError' })); });
+      await p.goto(BASE);
+      await p.waitForFunction(() => /prêt/.test(document.getElementById('splashStatus').textContent));
+      await p.click('#startBtn');
+      await p.evaluate(() => RocketApp.stopPlayback());
+      await p.click('#talkBtn');
+      await p.waitForFunction(() => /micro est bloqué/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
+      await c.close();
+    });
+  } finally {
+    await sb.close();
   }
 
   await test('sécurité : /api/ask refusé (403) depuis une autre machine du réseau', async () => {

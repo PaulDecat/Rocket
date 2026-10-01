@@ -203,6 +203,20 @@ const server = http.createServer((req, res) => {
   });
 });
 
+// Ouvre Rocket dans Chrome ou Edge (meilleure reconnaissance vocale) une fois le serveur prêt.
+function openBrowser(url) {
+  const { spawn } = require('child_process');
+  const run = (cmd, args) => { try { spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true }).unref(); return true; } catch (e) { return false; } };
+  if (process.platform === 'win32') {
+    const chrome = [process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA]
+      .filter(Boolean).map((d) => path.join(d, 'Google', 'Chrome', 'Application', 'chrome.exe')).find((f) => fs.existsSync(f));
+    if (chrome) return run(chrome, [url]);
+    return run('cmd', ['/c', 'start', '', 'msedge', url]) || run('cmd', ['/c', 'start', '', url]);
+  }
+  if (process.platform === 'darwin') return run('open', [url]);
+  return run('xdg-open', [url]);
+}
+
 function lanAddresses() {
   const out = [];
   for (const list of Object.values(os.networkInterfaces())) {
@@ -218,7 +232,7 @@ if (require.main === module) {
     process.exit(1);
   });
   server.listen(PORT, HOST, async () => {
-    console.log('\n  🚀 ROCKET v2 — votre morning économique');
+    console.log('\n  🚀 ROCKET v3 — votre assistant du matin');
     console.log(`  Sur cet ordinateur : http://localhost:${PORT}`);
     for (const a of lanAddresses()) console.log(`  Sur le Wi-Fi       : http://${a}:${PORT}`);
     const voice = tts.provider();
@@ -227,6 +241,7 @@ if (require.main === module) {
     console.log(`  Réponses : ${assistant.modeLabel()}`);
     console.log('  Pour arrêter : Ctrl + C\n');
     getBriefing(false).catch(() => {});
+    if (process.env.ROCKET_OPEN === '1') openBrowser(`http://localhost:${PORT}`);
   });
 }
 

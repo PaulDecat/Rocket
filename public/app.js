@@ -15,7 +15,7 @@
     config: null, briefing: null, bySym: {}, script: [], chapters: [],
     idx: 0, playing: false, paused: false, runToken: 0, resumeWait: null,
     view: 'briefing', visual: null, prevVisual: null, detail: null,
-    history: [], asking: false, coreState: 'idle', host: null, mini: 'bourse', autoPaused: false,
+    history: [], asking: false, coreState: 'idle', host: null, mini: 'bourse', autoPaused: false, micErrorAt: 0,
     intradayCache: new Map(), started: false,
   };
 
@@ -499,6 +499,9 @@
     core.raf = 0;
     const active = S.coreState !== 'idle' || Voice.speaking();
     if (Voice.speaking()) Voice.tick();
+    // Indicateur de niveau du micro sur le bouton « Parler ».
+    const lvl = Mic.active ? Mic.level() : 0;
+    if (lvl !== core.micLvl) { core.micLvl = lvl; $('talkBtn').style.setProperty('--lvl', lvl.toFixed(3)); }
     if (!active) { drawCore(now, 0); return; } // image fixe au repos
     if (now - core.last >= 42) { core.last = now; drawCore(now, Voice.level()); }
     core.raf = requestAnimationFrame(coreFrame);
@@ -808,10 +811,17 @@
     lock.querySelector('.talk-sub').textContent = st.latched ? 'appuyez pour relâcher' : 'écoute continue';
     if (pressed && !S.asking && S.coreState !== 'speaking') setCore('listening');
     else if (!pressed && S.coreState === 'listening') setCore('idle');
+    if (!pressed) $('talkBtn').style.setProperty('--lvl', '0');
+    startCore();
   }
 
+  const ENGINE_TXT = {
+    web: 'Moteur actif : reconnaissance du navigateur (Chrome, Edge).',
+    local: 'Moteur actif : moteur local (fonctionne dans tous les navigateurs ; ~80 Mo téléchargés la première fois).',
+  };
+
   function noMic() {
-    setStatus("La reconnaissance vocale n'est pas disponible dans ce navigateur (utilisez Chrome ou Edge). Tapez votre demande ci-dessous.");
+    setStatus("Ce navigateur ne donne pas accès au micro. Ouvrez Rocket à l'adresse http://localhost:3000 dans Chrome, Edge ou Opera, ou tapez votre demande ci-dessous.");
     $('askInput').focus();
   }
 
@@ -824,7 +834,11 @@
     pauseForListening();
     setStatus('Je vous écoute, Monsieur…');
     const raw = await Listen.once({ maxWaitMs: 15000 });
-    if (!raw) { setStatus("Je n'ai rien entendu, Monsieur."); resumeAfterListening(); return; }
+    if (!raw) {
+      if (Date.now() - S.micErrorAt > 1500) setStatus("Je n'ai rien entendu, Monsieur. Regardez la barre blanche du bouton : elle doit bouger quand vous parlez.");
+      resumeAfterListening();
+      return;
+    }
     if (!submit(raw)) resumeAfterListening();
   }
 
@@ -837,12 +851,17 @@
   }
 
   const listenHandlers = {
+    isSpeaking: () => Voice.speaking(),
+    status: (t) => { if (!S.asking) setStatus(t); },
+    hearing: () => { if (!S.asking && Listen.capturing) setStatus('Je vous écoute, Monsieur…'); },
+    transcribing: (on) => { if (on && !S.asking) setStatus('Transcription…'); },
+    engine: () => setStatus("Votre navigateur ne transmet pas la voix : Rocket passe à son moteur vocal local."),
     wake: () => { pauseForListening(); setCore('listening'); setStatus('Je vous écoute, Monsieur…'); },
     command: (question, raw) => { submit(raw); },
     incomplete: () => { setStatus("Terminez votre demande par « s'il te plaît », Monsieur."); resumeAfterListening(); if (S.coreState === 'listening' && !Listen.latched) setCore('idle'); },
     interim: (t) => { if (t && !S.asking) setStatus(t); },
     state: updateTalkUI,
-    error: (msg) => { setStatus(msg); setCore('idle'); },
+    error: (msg) => { S.micErrorAt = Date.now(); setStatus(msg); setCore('idle'); },
   };
 
   // ---------- Rappels du planning ----------
@@ -879,6 +898,8 @@
     $('ttsMode').textContent = modeTxt[Voice.mode] || Voice.mode;
     const serverVoices = Voice.mode === 'edge';
     $('voiceSel').disabled = !serverVoices;
+    $('sttSel').value = Listen.pref;
+    $('sttInfo').textContent = ENGINE_TXT[Listen.engine] + (Listen.webAvailable ? '' : ' La reconnaissance de ce navigateur ne fonctionne pas : le moteur local est utilisé.');
     $('aiMode').textContent = { 'claude-code': 'Claude via Claude Code (abonnement)', api: "Claude via l'API Anthropic", local: 'réponses locales (sans Claude)' }[cfg.ai] || cfg.ai;
   }
 
@@ -985,6 +1006,7 @@
     $('voiceSel').addEventListener('change', (e) => Voice.set('voice', e.target.value));
     $('rate').addEventListener('input', (e) => { Voice.set('rate', +e.target.value); $('rateOut').textContent = fmt(+e.target.value, 2); });
     $('musicTarget').addEventListener('change', (e) => Music.setTarget(e.target.value));
+    $('sttSel').addEventListener('change', (e) => { Listen.setPref(e.target.value); fillSettings(); });
     $('deezerCheck').addEventListener('click', checkDeezer);
     $('deezerUser').addEventListener('change', () => { try { localStorage.setItem('rocket.deezer', $('deezerUser').value.trim()); } catch (e) { /* ignore */ } });
     $('settings').addEventListener('click', (e) => {

@@ -268,7 +268,10 @@ button { cursor: pointer; }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 10px 8px;
   transition: background-color .2s, border-color .2s, box-shadow .2s, transform .1s, color .2s; color: var(--strong);
 }
-.talk-btn { border-color: rgb(var(--rocket-rgb)); }
+.talk-btn { border-color: rgb(var(--rocket-rgb)); position: relative; overflow: hidden; --lvl: 0; }
+/* Niveau du micro : la barre bouge quand vous parlez. */
+.talk-meter { position: absolute; left: 10px; right: 10px; bottom: 7px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .25); transform-origin: left; transform: scaleX(var(--lvl)); transition: transform 60ms linear; opacity: 0; }
+.talk-btn.pressed .talk-meter { opacity: 1; background: #fff; }
 .talk-btn:hover, .lock-btn:hover { transform: translateY(-1px); }
 .talk-btn:active, .lock-btn:active { transform: scale(.97); }
 .talk-ico { font-size: 26px; line-height: 1; }
