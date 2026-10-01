@@ -154,7 +154,7 @@
         g.fillText(fmtDate(t, span), x, T + ph + 8);
       }
 
-      const palette = [C.accent, `rgb(${C.leadRgb})`, `rgb(${C.amberRgb})`, C.green, `rgb(${C.coRgb})`];
+      const palette = [C.accent, `rgb(${C.altRgb})`, `rgb(${C.amberRgb})`, C.green, `rgb(${C.rocketRgb})`];
       const clipW = pw * this.progress;
       g.save();
       g.beginPath(); g.rect(L - 2, 0, clipW + 4, H); g.clip();
@@ -298,7 +298,7 @@
       const m = (vMax - vMin) * 0.1; vMax += vMax > 0 ? m : 0; vMin -= vMin < 0 ? m : 0;
       const Y = (v) => T + (1 - (v - vMin) / (vMax - vMin)) * ph;
       const dec = s.decimals != null ? s.decimals : autoDec(Math.max(Math.abs(vMax), Math.abs(vMin)));
-      const palette = [C.accent, `rgb(${C.leadRgb})`, `rgb(${C.amberRgb})`, C.green, `rgb(${C.coRgb})`];
+      const palette = [C.accent, `rgb(${C.altRgb})`, `rgb(${C.amberRgb})`, C.green, `rgb(${C.rocketRgb})`];
       g.font = `11px ${C.fontNum}`; g.textBaseline = 'middle'; g.textAlign = 'left';
       for (let i = 0; i <= 4; i++) {
         const v = vMin + ((vMax - vMin) * i) / 4, y = Math.round(Y(v)) + 0.5;

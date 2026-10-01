@@ -1,7 +1,7 @@
 {
   "name": "Rocket — Morning économique",
   "short_name": "Rocket",
-  "description": "Votre morning économique en podcast avec Nova et Atlas.",
+  "description": "Votre assistant du matin : marchés, politique, ciné, cuisine, coach et planning.",
   "lang": "fr",
   "start_url": "/",
   "scope": "/",

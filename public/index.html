@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Rocket — Morning économique</title>
-  <meta name="description" content="Rocket : votre morning économique en podcast avec Nova et Atlas, graphiques, radar investissement et assistant vocal.">
+  <title>Rocket — Assistant du matin</title>
+  <meta name="description" content="Rocket : votre assistant du matin. Marchés, politique, cinéma, cuisine, coach bien-être et planning, à la voix.">
   <meta name="theme-color" content="#0d1117">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -31,7 +31,8 @@
         <svg viewBox="0 0 64 64" width="72" height="72"><use href="#rocketIcon"/></svg>
       </div>
       <h1 id="splashTitle" class="splash-title">ROCKET</h1>
-      <p class="splash-sub">Votre morning économique</p>
+      <p class="splash-sub">Votre assistant du matin</p>
+      <p class="splash-rule">Pour parler à Rocket : « <b>Ok Rocket</b>, votre demande, <b>s'il te plaît</b> »</p>
       <p class="splash-label">Choisissez votre style</p>
       <div class="theme-cards" id="themeCards" role="radiogroup" aria-label="Style de l'interface"></div>
       <button id="startBtn" class="btn-primary" type="button">▶ Lancer le morning</button>
@@ -47,8 +48,12 @@
       <span class="brand-tag">Morning économique &amp; radar des marchés</span>
     </div>
     <nav class="tabs" role="tablist" aria-label="Vues">
-      <button class="tab active" role="tab" aria-selected="true" data-view="briefing" type="button">Briefing</button>
-      <button class="tab" role="tab" aria-selected="false" data-view="radar" type="button">Radar invest</button>
+      <button class="tab active" role="tab" aria-selected="true" data-view="briefing" type="button">📈 Briefing</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="radar" type="button">◎ Radar</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="cuisine" type="button">🍳 Cuisine</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="cine" type="button">🎬 Ciné</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="coach" type="button">💪 Coach</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="planning" type="button">📅 Planning<span class="tab-badge" id="planningBadge" hidden></span></button>
     </nav>
     <div class="mini-quotes" id="miniQuotes" aria-label="Cotations"></div>
     <span id="livePill" class="pill pill-demo" title="État des données">DÉMO</span>
@@ -73,8 +78,13 @@
         <div id="clockDate" class="clock-date">—</div>
       </section>
       <section class="panel markets-panel">
-        <h2 class="panel-title">Marchés</h2>
-        <ul id="marketList" class="market-list"></ul>
+        <div class="mini-tabs" role="tablist" aria-label="Indicateurs">
+          <button type="button" class="mini-tab active" role="tab" aria-selected="true" data-mini="bourse">Bourse</button>
+          <button type="button" class="mini-tab" role="tab" aria-selected="false" data-mini="politique">Politique</button>
+          <span class="mini-live" id="miniLive" title="Mise à jour automatique toutes les 10 minutes"></span>
+        </div>
+        <div class="mini-pane" id="paneBourse"><ul id="marketList" class="market-list"></ul></div>
+        <div class="mini-pane" id="panePolitique" hidden><ol id="politicsList" class="news-list"></ol></div>
       </section>
     </aside>
 
@@ -96,24 +106,32 @@
         </div>
       </section>
 
-      <section class="core-row" aria-label="Nova">
-        <div class="host-badge host-lead" id="badgeLead"><strong>NOVA</strong><span>Présentatrice</span></div>
-        <button id="coreBtn" class="core-btn" type="button" aria-label="Parler à Nova">
-          <canvas id="core" width="170" height="170"></canvas>
+      <section class="core-row" aria-label="Rocket">
+        <button id="talkBtn" class="talk-btn" type="button" aria-pressed="false" title="Appuyez puis dites : « Ok Rocket, … s'il te plaît »">
+          <span class="talk-ico" aria-hidden="true">🎙</span>
+          <span class="talk-label">PARLER</span>
+          <span class="talk-sub">à Rocket</span>
         </button>
-        <div class="host-badge host-co" id="badgeCo"><strong>ATLAS</strong><span>Co-animateur</span></div>
+        <div class="core-wrap">
+          <canvas id="core" width="170" height="170" aria-hidden="true"></canvas>
+          <div class="core-name">ROCKET</div>
+        </div>
+        <button id="lockBtn" class="lock-btn" type="button" aria-pressed="false" title="Garde le bouton « Parler » enfoncé : Rocket écoute en continu">
+          <span class="talk-ico" aria-hidden="true">🔓</span>
+          <span class="talk-label">MAINTENIR</span>
+          <span class="talk-sub">écoute continue</span>
+        </button>
       </section>
 
       <form id="askForm" class="ask-bar" autocomplete="off">
-        <button id="micBtn" class="icon-btn mic-btn" type="button" aria-label="Poser une question au micro">🎙</button>
-        <input id="askInput" type="text" placeholder="Demandez à Nova… « Comment va le CAC 40 ? »" aria-label="Question pour Nova" maxlength="500">
+        <input id="askInput" type="text" placeholder="Ok Rocket, comment va le CAC 40, s'il te plaît" aria-label="Demande pour Rocket" maxlength="500">
         <button class="icon-btn send-btn" type="submit" aria-label="Envoyer">➤</button>
-        <button id="wakeBtn" class="wake-btn" type="button" aria-pressed="true" title="Réveil vocal « OK Nova »">OK NOVA <b>ON</b></button>
       </form>
 
       <section class="subtitles" aria-live="polite">
-        <div id="subSpeaker" class="sub-speaker">NOVA</div>
+        <div id="subSpeaker" class="sub-speaker">ROCKET</div>
         <div id="subText" class="sub-text">Appuyez sur « Lancer le morning » pour commencer.</div>
+        <div class="sub-rule">« <b>Ok Rocket</b> … <b>s'il te plaît</b> »</div>
       </section>
     </section>
 
@@ -134,7 +152,7 @@
         <div id="musicFrameWrap" class="music-frame"></div>
       </section>
       <section class="panel news-panel">
-        <h2 class="panel-title">Actualités</h2>
+        <h2 class="panel-title">Actualités éco</h2>
         <ol id="newsList" class="news-list"></ol>
       </section>
       <section class="panel program-panel">
@@ -161,16 +179,12 @@
     <form method="dialog" class="settings-form">
       <h2>Réglages</h2>
       <p class="set-row"><span>Voix :</span> <b id="ttsMode">—</b></p>
-      <label class="set-row">Voix de Nova
-        <span class="set-inline"><select id="voiceLead"></select><button type="button" class="btn-ghost" data-test="lead">▶ Écouter</button></span>
-      </label>
-      <label class="set-row">Voix d'Atlas
-        <span class="set-inline"><select id="voiceCo"></select><button type="button" class="btn-ghost" data-test="co">▶ Écouter</button></span>
+      <label class="set-row">Voix de Rocket
+        <span class="set-inline"><select id="voiceSel"></select><button type="button" class="btn-ghost" data-test="1">▶ Écouter</button></span>
       </label>
       <label class="set-row">Vitesse <output id="rateOut">1,05</output>
         <input id="rate" type="range" min="0.8" max="1.3" step="0.05" value="1.05">
       </label>
-      <label class="set-check"><input id="solo" type="checkbox"> Nova seule (une seule voix)</label>
       <label class="set-row">Jouer la musique dans
         <select id="musicTarget">
           <option value="app">l'appli Deezer de l'ordinateur</option>
@@ -196,12 +210,14 @@
     </symbol>
   </svg>
 
+  <script src="/command.js"></script>
   <script src="/themes.js"></script>
   <script src="/hud-bg.js"></script>
   <script src="/charts.js"></script>
   <script src="/voice.js"></script>
   <script src="/listen.js"></script>
   <script src="/music.js"></script>
+  <script src="/views.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

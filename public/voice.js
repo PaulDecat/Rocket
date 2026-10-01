@@ -1,14 +1,14 @@
 'use strict';
-// Synthèse vocale : voix du serveur (Microsoft / ElevenLabs) avec repli sur les voix du navigateur.
+// Synthèse vocale de Rocket : voix du serveur (Microsoft / ElevenLabs) avec repli sur les voix du navigateur.
 (function () {
-  const KEY = 'rocket.voice';
+  const KEY = 'rocket.voice.v2';
   const FEMALE = /(amelie|amélie|audrey|aurelie|aurélie|marie|julie|denise|vivienne|eloise|éloïse|hortense|virginie|celine|céline|chantal|joana|lea|léa|sylvie|charline|ariane|google français)/i;
   const MALE = /(thomas|henri|remy|rémy|paul|nicolas|daniel|jacques|claude|guillaume|mathieu|antoine|jean|fabrice|olivier)/i;
 
   const state = {
     mode: 'edge', // edge | elevenlabs | browser
     serverFails: 0,
-    settings: { lead: '', co: '', rate: 1.05, solo: false },
+    settings: { voice: '', rate: 1.05 },
     audio: null, ctx: null, analyser: null, data: null,
     seq: 0, current: null, paused: false,
     cache: new Map(), browserVoices: [],
@@ -20,10 +20,8 @@
 
   function configure(cfg) {
     state.mode = cfg.tts || 'edge';
-    const def = cfg.defaultVoices || {};
     const ids = (cfg.voices || []).map((v) => v.id);
-    if (!ids.includes(state.settings.lead)) state.settings.lead = def.lead || '';
-    if (!ids.includes(state.settings.co)) state.settings.co = def.co || '';
+    if (!ids.includes(state.settings.voice)) state.settings.voice = cfg.defaultVoice || '';
   }
 
   function loadBrowserVoices() {
@@ -35,15 +33,16 @@
     speechSynthesis.addEventListener && speechSynthesis.addEventListener('voiceschanged', loadBrowserVoices);
   }
 
-  function pickBrowserVoice(speaker) {
+  // Rocket a une voix masculine : on privilégie les voix d'homme françaises.
+  function pickBrowserVoice() {
     const list = state.browserVoices;
     if (!list.length) return null;
     const score = (v) => {
       let s = 0;
       if (/^fr[-_]FR/i.test(v.lang)) s += 3; else s += 1;
       if (/(natural|neural|premium|enhanced|online|siri)/i.test(v.name)) s += 3;
-      if (speaker === 'lead' ? FEMALE.test(v.name) : MALE.test(v.name)) s += 2;
-      if (speaker === 'lead' ? MALE.test(v.name) : FEMALE.test(v.name)) s -= 2;
+      if (MALE.test(v.name)) s += 2;
+      if (FEMALE.test(v.name)) s -= 2;
       if (v.localService) s += 0.5;
       return s;
     };
@@ -70,17 +69,15 @@
     if ('speechSynthesis' in window) loadBrowserVoices();
   }
 
-  function speakerKey(speaker) { return state.settings.solo ? 'lead' : speaker === 'co' ? 'co' : 'lead'; }
   function rateParam() { return Math.round((state.settings.rate - 1) * 100); }
-  function cacheKey(text, speaker) { const sp = speakerKey(speaker); return [sp, state.settings[sp], state.settings.rate, text].join('|'); }
+  function cacheKey(text) { return [state.settings.voice, state.settings.rate, text].join('|'); }
 
-  function fetchAudio(text, speaker) {
-    const key = cacheKey(text, speaker);
+  function fetchAudio(text) {
+    const key = cacheKey(text);
     if (state.cache.has(key)) return state.cache.get(key);
-    const sp = speakerKey(speaker);
     const p = fetch('/api/tts', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, speaker: sp, voice: state.settings[sp], rate: rateParam() }),
+      body: JSON.stringify({ text, voice: state.settings.voice, rate: rateParam() }),
     }).then((r) => {
       if (!r.ok) throw new Error('TTS ' + r.status);
       return r.blob();
@@ -99,13 +96,13 @@
 
   function useServer() { return state.mode !== 'browser' && state.serverFails < 2; }
 
-  function prefetch(text, speaker) {
+  function prefetch(text) {
     if (!text || !useServer()) return;
-    fetchAudio(text, speaker).catch(() => {});
+    fetchAudio(text).catch(() => {});
   }
 
-  function speakServer(text, speaker, onProgress, seq) {
-    return fetchAudio(text, speaker).then((url) => new Promise((resolve, reject) => {
+  function speakServer(text, onProgress, seq) {
+    return fetchAudio(text).then((url) => new Promise((resolve, reject) => {
       if (seq !== state.seq) return resolve(false);
       const a = state.audio;
       let last = -1;
@@ -135,12 +132,11 @@
     return out;
   }
 
-  function speakBrowser(text, speaker, onProgress, seq) {
+  function speakBrowser(text, onProgress, seq) {
     return new Promise((resolve) => {
       if (!('speechSynthesis' in window)) { onProgress && onProgress(1); return setTimeout(() => resolve(true), Math.min(8000, text.length * 45)); }
       speechSynthesis.cancel();
-      const sp = speakerKey(speaker);
-      const voice = pickBrowserVoice(sp);
+      const voice = pickBrowserVoice();
       const chunks = splitSentences(text);
       let offset = 0, i = 0;
       const finish = (v) => { state.synthSpeaking = false; state.current = null; resolve(v); };
@@ -153,7 +149,7 @@
         u.lang = 'fr-FR';
         if (voice) u.voice = voice;
         u.rate = state.settings.rate;
-        u.pitch = sp === 'co' && !state.settings.solo ? 0.85 : 1.05;
+        u.pitch = 0.95;
         // Garde-fou : certains navigateurs n'émettent jamais « end » (aucune voix installée, onglet en arrière-plan…).
         let done = false, started = false;
         const budget = (chunk.length * 85) / state.settings.rate + 2500;
@@ -183,14 +179,14 @@
   }
 
   // Lit un texte ; résout true à la fin, false si interrompu.
-  async function speak(text, speaker = 'lead', onProgress) {
+  async function speak(text, onProgress) {
     stop();
     const seq = ++state.seq;
     state.paused = false;
     unlock();
     if (useServer()) {
       try {
-        const r = await speakServer(text, speaker, onProgress, seq);
+        const r = await speakServer(text, onProgress, seq);
         state.serverFails = 0;
         return r;
       } catch (e) {
@@ -199,7 +195,7 @@
         console.warn('[Voix] serveur indisponible, repli navigateur', e);
       }
     }
-    return speakBrowser(text, speaker, onProgress, seq);
+    return speakBrowser(text, onProgress, seq);
   }
 
   function stop() {
@@ -247,6 +243,5 @@
     configure, unlock, speak, prefetch, stop, pause, resume, level, tick, speaking, set,
     get settings() { return { ...state.settings }; },
     get mode() { return useServer() ? state.mode : 'browser'; },
-    get solo() { return !!state.settings.solo; },
   };
 })();

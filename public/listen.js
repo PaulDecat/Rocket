@@ -1,20 +1,20 @@
 'use strict';
-// Reconnaissance vocale : mot d'appel « OK Nova », capture d'une question, écoute de conversation.
+// Reconnaissance vocale de Rocket.
+// - Listen.once()        : une seule demande (bouton « Parler »).
+// - Listen.setLatched()  : écoute continue (bouton « Maintenir »).
+// Une demande n'est exécutée que si elle commence par « Ok Rocket » et finit par « s'il te plaît ».
 (function () {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const KEY = 'rocket.wake';
-  const NAMES = '(?:nova|novah|novas|nosa|noa|noah|nora|nowa|novak|nava|neva|écho|echo)';
-  const WAKE = new RegExp(`(?:^|\\s)(?:ok|okay|o\\.k\\.?|hey|hé|he|dis|allô|allo)[\\s,.!-]*${NAMES}\\b[\\s,.!?-]*`, 'i');
-  const NAME_ONLY = new RegExp(`^\\s*${NAMES}\\s*[,!.]\\s*(.{3,})`, 'i');
+  const BUFFER_MS = 12000; // délai max entre « Ok Rocket » et « s'il te plaît »
 
   const st = {
-    rec: null, running: false, enabled: false, wantRun: false,
-    mode: 'wake', // wake | capture
-    capture: null, // { resolve, timer, text }
-    handlers: {}, lastWakeIdx: -1, restartTimer: 0, failures: 0, beepCtx: null,
+    rec: null, running: false, wantRun: false, latched: false, failures: 0, restartTimer: 0,
+    capture: null, // écoute ponctuelle : { resolve, timer, idle, text }
+    buffer: null, // écoute continue : { text, timer }
+    handlers: {}, beepCtx: null,
   };
 
-  try { st.enabled = localStorage.getItem(KEY) !== 'off'; } catch (e) { st.enabled = true; }
+  function emit(name, ...args) { const f = st.handlers[name]; if (f) try { return f(...args); } catch (e) { console.error(e); } }
 
   function beep(freq = 880, dur = 0.12, vol = 0.12) {
     try {
@@ -32,39 +32,35 @@
     } catch (e) { /* ignore */ }
   }
 
-  function emit(name, ...args) { const f = st.handlers[name]; if (f) try { f(...args); } catch (e) { console.error(e); } }
-
   function ensureRec() {
     if (st.rec || !SR) return st.rec;
     const r = new SR();
     r.lang = 'fr-FR';
     r.continuous = true;
     r.interimResults = true;
-    r.maxAlternatives = 1;
     r.onstart = () => { st.running = true; st.failures = 0; };
     r.onend = () => { st.running = false; scheduleRestart(); };
     r.onerror = (e) => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        st.wantRun = false; st.enabled = false;
+        st.wantRun = false;
         finishCapture(null);
-        emit('error', "Le micro est refusé. Autorisez-le dans la barre d'adresse du navigateur (icône du cadenas), puis réactivez OK NOVA.");
-        emit('enabled', false);
-      } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
-        st.failures++;
-      }
+        if (st.latched) { st.latched = false; notify(); }
+        emit('error', "Le micro est refusé. Autorisez-le dans la barre d'adresse du navigateur (icône du cadenas), puis réessayez.");
+      } else if (e.error !== 'no-speech' && e.error !== 'aborted') st.failures++;
     };
     r.onresult = onResult;
     st.rec = r;
     return r;
   }
 
+  function active() { return st.latched || !!st.capture; }
+  function notify() { emit('state', { listening: active(), latched: st.latched }); }
+
   function scheduleRestart() {
     clearTimeout(st.restartTimer);
-    if (!(st.enabled || st.capture) || !st.wantRun) return;
-    const delay = st.failures > 3 ? 3000 : 250;
-    st.restartTimer = setTimeout(start, delay);
+    if (!active() || !st.wantRun) return;
+    st.restartTimer = setTimeout(start, st.failures > 3 ? 3000 : 250);
   }
-
   function start() {
     if (!SR) return;
     st.wantRun = true;
@@ -72,96 +68,92 @@
     if (st.running) return;
     try { r.start(); } catch (e) { /* déjà démarrée */ }
   }
-
   function stopRec() {
     st.wantRun = false;
     clearTimeout(st.restartTimer);
     if (st.rec && st.running) { try { st.rec.stop(); } catch (e) { /* ignore */ } }
   }
 
+  // ---------- Écoute ponctuelle (bouton « Parler ») ----------
   function finishCapture(text) {
     const c = st.capture;
     if (!c) return;
     st.capture = null;
-    st.mode = 'wake';
-    clearTimeout(c.timer);
+    clearTimeout(c.timer); clearTimeout(c.idle);
+    if (!active()) stopRec();
+    notify();
     c.resolve(text && text.trim() ? text.trim() : null);
-    if (!st.enabled) stopRec();
   }
 
-  function onResult(e) {
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const res = e.results[i];
-      const text = res[0].transcript;
-      const final = res.isFinal;
-
-      if (st.capture) {
-        const c = st.capture;
-        // En capture après un mot d'appel dans la même phrase : ignorer le mot d'appel.
-        const cleaned = text.replace(WAKE, ' ').trim();
-        emit('interim', cleaned);
-        if (final && cleaned) finishCapture(cleaned);
-        else if (cleaned) { clearTimeout(c.timer); c.timer = setTimeout(() => finishCapture(cleaned), 2500); }
-        continue;
-      }
-
-      if (!st.enabled) continue;
-      const busy = st.handlers.isBusy ? st.handlers.isBusy() : false;
-      const m = text.match(WAKE);
-      if (m) {
-        const rest = text.slice(m.index + m[0].length).trim();
-        if (st.lastWakeIdx !== i) {
-          st.lastWakeIdx = i;
-          emit('wake'); // l'app coupe la voix et le podcast
-        }
-        if (final) {
-          st.lastWakeIdx = -1;
-          if (rest.length > 2) emit('question', rest);
-          else {
-            beep();
-            once({ maxWaitMs: 8000 }).then((q) => { if (q) emit('question', q); else emit('timeout'); });
-          }
-        }
-        continue;
-      }
-      if (final && !busy) {
-        const n = text.match(NAME_ONLY);
-        if (n) { emit('wake'); emit('question', n[1].trim()); }
-      }
-    }
-  }
-
-  // Capture une seule question (micro, clic sur le noyau, suite du mot d'appel).
-  function once({ maxWaitMs = 8000, beep: doBeep = false, quiet = false } = {}) {
+  function once({ maxWaitMs = 15000 } = {}) {
     if (!SR) return Promise.resolve(null);
     if (st.capture) finishCapture(null);
-    if (doBeep) beep(doBeep === 'soft' ? 660 : 880, 0.1, doBeep === 'soft' ? 0.06 : 0.12);
+    beep();
     return new Promise((resolve) => {
-      st.mode = 'capture';
-      st.capture = { resolve, timer: setTimeout(() => finishCapture(null), maxWaitMs) };
-      emit('listening', quiet);
+      st.capture = { resolve, text: '', timer: setTimeout(() => finishCapture(st.capture && st.capture.text), maxWaitMs), idle: 0 };
+      notify();
       start();
     });
   }
 
+  // ---------- Écoute continue (bouton « Maintenir ») ----------
+  function resetBuffer() { if (st.buffer) clearTimeout(st.buffer.timer); st.buffer = null; }
+
+  function onResult(e) {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i];
+      const text = res[0].transcript.trim();
+      const final = res.isFinal;
+      if (!text) continue;
+
+      if (st.capture) {
+        const c = st.capture;
+        const full = (c.text + ' ' + text).trim();
+        emit('interim', full);
+        if (Command.parse(full).wake && !c.waked) { c.waked = true; emit('wake'); }
+        if (final) {
+          c.text = full;
+          if (Command.parse(c.text).complete) { finishCapture(c.text); continue; }
+          clearTimeout(c.idle);
+          c.idle = setTimeout(() => finishCapture(c.text), 2500);
+        }
+        continue;
+      }
+
+      if (!st.latched) continue;
+      // Une demande commence toujours par « Ok Rocket » : le reste est ignoré.
+      const startsNew = Command.parse(text).wake;
+      if (!st.buffer && !startsNew) continue;
+      if (!st.buffer || startsNew) {
+        resetBuffer();
+        st.buffer = { text: '', timer: setTimeout(() => { const t = st.buffer && st.buffer.text; resetBuffer(); if (t) emit('incomplete', t); }, BUFFER_MS) };
+        emit('wake');
+      }
+      const full = (st.buffer.text + ' ' + text).trim();
+      emit('interim', full);
+      if (final) {
+        st.buffer.text = full;
+        const p = Command.parse(full);
+        if (p.complete) { resetBuffer(); emit('command', p.question, full); }
+      }
+    }
+  }
+
+  function setLatched(on) {
+    st.latched = !!on && !!SR;
+    resetBuffer();
+    if (st.latched) { beep(660, 0.1, 0.08); start(); }
+    else if (!st.capture) stopRec();
+    notify();
+  }
+
   function cancel() { finishCapture(null); }
 
-  function setEnabled(on) {
-    st.enabled = !!on;
-    try { localStorage.setItem(KEY, on ? 'on' : 'off'); } catch (e) { /* ignore */ }
-    if (on) start(); else if (!st.capture) stopRec();
-    emit('enabled', st.enabled);
-  }
-
-  function init(handlers) {
-    st.handlers = handlers || {};
-    if (SR && st.enabled) start();
-  }
+  function init(handlers) { st.handlers = handlers || {}; }
 
   window.Listen = {
-    supported: !!SR, init, once, cancel, setEnabled, beep,
-    get enabled() { return st.enabled && !!SR; },
+    supported: !!SR, init, once, cancel, setLatched, beep,
+    get latched() { return st.latched; },
     get capturing() { return !!st.capture; },
-    WAKE, NAME_ONLY,
   };
 })();

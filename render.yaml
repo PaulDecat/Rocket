@@ -14,7 +14,5 @@ services:
         sync: false
       - key: ELEVENLABS_API_KEY
         sync: false
-      - key: ELEVENLABS_VOICE_LEAD
-        sync: false
-      - key: ELEVENLABS_VOICE_CO
+      - key: ELEVENLABS_VOICE
         sync: false

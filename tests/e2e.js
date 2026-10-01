@@ -47,7 +47,20 @@ function lanIp() {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
     // Pas de micro dans le navigateur de test : on désactive « OK Nova ».
-    await ctx.addInitScript(() => { try { localStorage.setItem('rocket.wake', 'off'); } catch (e) { /* ignore */ } });
+    // Faux micro : on « dit » une phrase avec window.__say(texte).
+    await ctx.addInitScript(() => {
+      window.webkitSpeechRecognition = class {
+        constructor() { window.__sr = this; }
+        start() { this.running = true; setTimeout(() => this.onstart && this.onstart(), 0); }
+        stop() { this.running = false; setTimeout(() => this.onend && this.onend(), 0); }
+      };
+      window.SpeechRecognition = window.webkitSpeechRecognition;
+      window.__say = (text) => {
+        const res = [{ transcript: text }];
+        res.isFinal = true;
+        window.__sr.onresult({ resultIndex: 0, results: [res] });
+      };
+    });
     page.on('pageerror', (e) => errors.push(e.message));
 
     await test('la page charge en moins de 2 s', async () => {
@@ -64,7 +77,7 @@ function lanIp() {
       assert.ok(/démo/.test(await page.textContent('#splashStatus')));
     });
 
-    await test('lancement : le podcast avance, Nova et Atlas alternent, les visuels changent', async () => {
+    await test('lancement : le podcast avance avec Rocket seul, les visuels changent', async () => {
       await page.click('.theme-card[data-theme-id="clean"]');
       await page.click('#startBtn');
       await page.waitForFunction(() => document.getElementById('splash').hidden);
@@ -75,7 +88,8 @@ function lanIp() {
         await page.evaluate(() => RocketApp.jump(RocketApp.state.idx + 1));
         await page.waitForTimeout(250);
       }
-      assert.ok(seen.has('NOVA') && seen.has('ATLAS'), [...seen].join(','));
+      assert.deepStrictEqual([...seen], ['ROCKET']);
+      assert.strictEqual(await page.locator('#badgeLead, #badgeCo').count(), 0, 'plus de Nova ni d’Atlas');
       assert.ok(visuals.size >= 4, 'visuels : ' + visuals.size);
       const idx = await page.evaluate(() => RocketApp.state.idx);
       assert.ok(idx >= 5);
@@ -91,7 +105,7 @@ function lanIp() {
       const len = await page.evaluate(() => RocketApp.state.script.length);
       await page.evaluate((len) => RocketApp.jump(len - 1), len);
       await page.waitForFunction(() => !RocketApp.state.playing, null, { timeout: 20000 });
-      assert.ok(/demain matin/.test(await page.textContent('#subText')));
+      assert.ok(/Excellente journée, Monsieur/.test(await page.textContent('#subText')));
     });
 
     await test('fiche détaillée : 6 périodes, RSI, risque, Échap ferme', async () => {
@@ -103,7 +117,7 @@ function lanIp() {
         await page.waitForTimeout(150);
       }
       const txt = await page.textContent('#detailStats');
-      assert.ok(/RSI 14/.test(txt) && /Niveau de risque/.test(txt) && /Analyse de Nova/.test(txt));
+      assert.ok(/RSI 14/.test(txt) && /Niveau de risque/.test(txt) && /Analyse de Rocket/.test(txt));
       await page.keyboard.press('Escape');
       assert.ok(await page.locator('#periodTabs').isHidden());
     });
@@ -123,24 +137,141 @@ function lanIp() {
       await page.click('.tab[data-view="briefing"]');
     });
 
-    await test('question « comment va le CAC 40 ? » : réponse locale + courbe', async () => {
-      await page.fill('#askInput', 'comment va le CAC 40 ?');
-      await page.press('#askInput', 'Enter');
+    const sub = () => page.textContent('#subText');
+    const typeCommand = async (text) => { await page.fill('#askInput', text); await page.press('#askInput', 'Enter'); };
+
+    await test('règle : sans « Ok Rocket … s’il te plaît », rien n’est exécuté', async () => {
+      await typeCommand('comment va le CAC 40 ?');
+      assert.ok(/Commencez par « Ok Rocket »/.test(await sub()));
+      await typeCommand('Ok Rocket, comment va le CAC 40');
+      assert.ok(/Terminez votre demande par « s'il te plaît »/.test(await sub()));
+      assert.strictEqual(await page.inputValue('#askInput'), 'Ok Rocket, comment va le CAC 40', 'la demande reste à compléter');
+    });
+
+    await test('« Ok Rocket, comment va le CAC 40, s’il te plaît » : réponse + courbe', async () => {
+      await typeCommand("Ok Rocket, comment va le CAC 40, s'il te plaît");
       await page.waitForFunction(() => /CAC 40 est à/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
-      const v = await page.evaluate(() => RocketApp.state.visual);
-      assert.deepStrictEqual(v, { type: 'line', symbol: '^FCHI' });
+      assert.deepStrictEqual(await page.evaluate(() => RocketApp.state.visual), { type: 'line', symbol: '^FCHI' });
+    });
+
+    await test('demande incomprise : « Désolé Monsieur, je n’ai pas compris »', async () => {
+      await typeCommand("Ok Rocket, blablabla machin truc, s'il te plaît");
+      await page.waitForFunction(() => /Désolé Monsieur, je n'ai pas compris/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
+      await typeCommand("Ok Rocket s'il te plaît");
+      await page.waitForFunction(() => /Désolé Monsieur, je n'ai pas compris/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
     });
 
     await test('« reprends le briefing » puis « stop »', async () => {
-      await page.evaluate(() => RocketApp.ask('reprends le briefing'));
+      await page.evaluate(() => RocketApp.submit("Ok Rocket, reprends le briefing, s'il te plaît"));
       await page.waitForFunction(() => RocketApp.state.playing, null, { timeout: 15000 });
-      await page.evaluate(() => RocketApp.ask('stop'));
+      await page.evaluate(() => RocketApp.submit("Ok Rocket, stop, s'il te plaît"));
       await page.waitForFunction(() => !RocketApp.state.playing, null, { timeout: 8000 });
     });
 
-    await test('question libre sans Claude : réponse de repli claire', async () => {
-      await page.evaluate(() => RocketApp.ask('Montre-moi le CDS à 5 ans de la France'));
-      await page.waitForFunction(() => /besoin de Claude/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
+    await test('bouton « Parler » : change de couleur quand il est appuyé', async () => {
+      const color = () => page.evaluate(() => getComputedStyle(document.getElementById('talkBtn')).backgroundColor);
+      const before = await color();
+      await page.click('#talkBtn');
+      await page.waitForFunction(() => document.getElementById('talkBtn').classList.contains('pressed'));
+      await page.waitForTimeout(300); // fin de la transition de couleur
+      assert.notStrictEqual(await color(), before);
+      assert.strictEqual(await page.getAttribute('#talkBtn', 'aria-pressed'), 'true');
+      await page.click('#talkBtn'); // second appui : annule
+      await page.waitForFunction(() => !document.getElementById('talkBtn').classList.contains('pressed'));
+    });
+
+    await test('bouton « Maintenir » : garde « Parler » enfoncé, puis le relâche', async () => {
+      await page.click('#lockBtn');
+      const st = () => page.evaluate(() => ({ talk: document.getElementById('talkBtn').classList.contains('pressed'), lock: document.getElementById('lockBtn').classList.contains('pressed') }));
+      assert.deepStrictEqual(await st(), { talk: true, lock: true });
+      await page.click('#talkBtn'); // « Parler » reste enfoncé tant que « Maintenir » est actif
+      assert.deepStrictEqual(await st(), { talk: true, lock: true });
+      await page.click('#lockBtn');
+      assert.deepStrictEqual(await st(), { talk: false, lock: false });
+    });
+
+    await test('voix : « Parler » puis « Ok Rocket, ouvre la cuisine, s’il te plaît »', async () => {
+      await page.click('#talkBtn');
+      await page.evaluate(() => window.__say("Ok Rocket, ouvre la cuisine, s'il te plaît"));
+      await page.waitForFunction(() => RocketApp.state.view === 'cuisine', null, { timeout: 8000 });
+      assert.ok(!(await page.evaluate(() => document.getElementById('talkBtn').classList.contains('pressed'))), 'le bouton revient à son état initial');
+    });
+
+    await test('voix en écoute continue : seules les phrases « Ok Rocket … s’il te plaît » sont exécutées', async () => {
+      await page.click('#lockBtn');
+      await page.evaluate(() => window.__say('comment va le bitcoin'));
+      await page.waitForTimeout(400);
+      assert.strictEqual(await page.evaluate(() => RocketApp.state.asking), false);
+      await page.evaluate(() => window.__say('Ok Rocket, comment va le bitcoin'));
+      await page.evaluate(() => window.__say("s'il te plaît"));
+      await page.waitForFunction(() => /bitcoin est à/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
+      assert.ok(await page.evaluate(() => document.getElementById('talkBtn').classList.contains('pressed')), '« Parler » reste enfoncé');
+      await page.click('#lockBtn');
+      await page.click('.tab[data-view="briefing"]');
+    });
+
+    await test('mini-onglets Bourse / Politique', async () => {
+      await page.click('.mini-tab[data-mini="politique"]');
+      assert.ok(await page.locator('#panePolitique').isVisible());
+      assert.ok(await page.locator('#paneBourse').isHidden());
+      assert.ok((await page.locator('#politicsList li').count()) >= 3);
+      await page.click('#politicsList [data-pol="0"]');
+      assert.strictEqual(await page.evaluate(() => RocketApp.state.visual.type), 'politics');
+      await page.click('.mini-tab[data-mini="bourse"]');
+      assert.ok(await page.locator('#paneBourse').isVisible());
+    });
+
+    await test('onglets Cuisine, Ciné, Coach, Planning', async () => {
+      await page.click('.tab[data-view="cuisine"]');
+      await page.waitForSelector('.recipe h4');
+      const t1 = await page.textContent('.recipe h4');
+      await page.click('[data-act="random-recipe"]');
+      assert.notStrictEqual(await page.textContent('.recipe h4'), t1);
+      await page.click('.tab[data-view="cine"]');
+      assert.ok((await page.locator('.page-cine .card').count()) >= 3);
+      await page.click('.tab[data-view="coach"]');
+      await page.click('[data-habit="eau"][data-d="1"]');
+      await page.click('[data-habit="eau"][data-d="1"]');
+      assert.ok(/2\/8/.test(await page.textContent('.habits')));
+      await page.click('.tab[data-view="planning"]');
+      await page.fill('.plan-form input[name="title"]', 'Réunion test');
+      await page.fill('.plan-form input[name="time"]', '23:59');
+      await page.click('.plan-form button[type="submit"]');
+      assert.ok(/Réunion test/.test(await page.textContent('.plan-days')));
+      assert.strictEqual((await page.textContent('#planningBadge')).trim(), '1');
+    });
+
+    await test('commandes vocales du planning, du coach et de la cuisine', async () => {
+      await typeCommand("Ok Rocket, ajoute dentiste demain à 15h, s'il te plaît");
+      await page.waitForFunction(() => /C'est noté, Monsieur : Dentiste, demain à 15 heures/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
+      assert.strictEqual(await page.evaluate(() => RocketApp.state.view), 'planning');
+      assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem('rocket.planning')).some((e) => e.title === 'Dentiste' && e.time === '15:00')));
+      await typeCommand("Ok Rocket, qu'est-ce que j'ai demain, s'il te plaît");
+      await page.waitForFunction(() => /Dentiste à 15 heures/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
+      await typeCommand("Ok Rocket, supprime le dentiste, s'il te plaît");
+      await page.waitForFunction(() => /J'ai supprimé Dentiste/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
+      await typeCommand("Ok Rocket, j'ai bu un verre d'eau, s'il te plaît");
+      await page.waitForFunction(() => /3 verres sur 8/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
+      assert.strictEqual(await page.evaluate(() => RocketApp.state.view), 'coach');
+      await typeCommand("Ok Rocket, une recette avec des courgettes, s'il te plaît");
+      await page.waitForFunction(() => /Ratatouille/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
+      assert.strictEqual(await page.textContent('.recipe h4'), 'Ratatouille provençale');
+      await typeCommand("Ok Rocket, affiche la politique, s'il te plaît");
+      await page.waitForFunction(() => !document.getElementById('panePolitique').hidden, null, { timeout: 8000 });
+      await page.click('.mini-tab[data-mini="bourse"]');
+    });
+
+    await test('rappel vocal du planning à l’heure du rendez-vous', async () => {
+      await page.evaluate(() => {
+        const now = new Date();
+        const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const list = JSON.parse(localStorage.getItem('rocket.planning'));
+        list.push({ id: 'r1', title: 'Appeler le garage', date: now.toLocaleDateString('sv-SE'), time: hm });
+        localStorage.setItem('rocket.planning', JSON.stringify(list));
+        RocketApp.checkReminders(now);
+      });
+      await page.waitForFunction(() => /Monsieur, rappel : Appeler le garage/.test(document.getElementById('subText').textContent), null, { timeout: 8000 });
+      await page.click('.tab[data-view="briefing"]');
     });
 
     await test('les 4 thèmes s’appliquent et sont mémorisés', async () => {

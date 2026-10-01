@@ -60,7 +60,7 @@
 
   function hide() { stop(); $('musicPanel').hidden = true; }
 
-  // Commande reçue de Nova. Renvoie un texte complémentaire éventuel.
+  // Commande reçue de Rocket. Renvoie un texte complémentaire éventuel.
   function handle(m) {
     if (!m) return '';
     if (m.action === 'play') { play(m); return ''; }

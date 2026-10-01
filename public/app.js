@@ -1,18 +1,21 @@
 'use strict';
-// ROCKET — logique de l'interface.
+// ROCKET v2 — logique de l'interface.
 (function () {
   const $ = (id) => document.getElementById(id);
   const fmt = ChartUtil.fmt;
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+  const SORRY = "Désolé Monsieur, je n'ai pas compris.";
+  const PAGES = ['cuisine', 'cine', 'coach', 'planning'];
+  const PAGE_TITLES = { cuisine: ['Cuisine', 'Recettes de saison'], cine: ['Actu ciné', 'Les dernières nouvelles du cinéma'], coach: ['Coach hygiène de vie', 'Vos habitudes du jour'], planning: ['Planning', 'Vos rendez-vous'] };
   const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
   const S = {
     config: null, briefing: null, bySym: {}, script: [], chapters: [],
     idx: 0, playing: false, paused: false, runToken: 0, resumeWait: null,
     view: 'briefing', visual: null, prevVisual: null, detail: null,
-    history: [], asking: false, coreState: 'idle', host: null,
+    history: [], asking: false, coreState: 'idle', host: null, mini: 'bourse', autoPaused: false,
     intradayCache: new Map(), started: false,
   };
 
@@ -66,6 +69,7 @@
       $('clockTime').textContent = hhmm(d);
       $('clockDay').textContent = JOURS[d.getDay()];
       $('clockDate').textContent = longDate(d);
+      if (S.started) checkReminders(d);
     }
   }
 
@@ -86,29 +90,72 @@
     const b = await r.json();
     S.briefing = b;
     S.bySym = Object.fromEntries(b.markets.map((m) => [m.symbol, m]));
-    S.script = b.script;
+    Views.setData(b);
+    if (!S.playing) { S.script = withPlanning(b.script); buildChapters(); }
     S.intradayCache.clear();
-    buildChapters();
     renderAll();
     return b;
+  }
+
+  // Ajoute au podcast une réplique « agenda » si des rendez-vous sont prévus aujourd'hui.
+  function withPlanning(script) {
+    const today = Views.Planning.upcoming(0).filter((e) => e.date === new Date().toLocaleDateString('sv-SE'));
+    if (!today.length) return script;
+    const seg = {
+      speaker: 'rocket', host: 'Rocket', visual: { type: 'page', view: 'planning', label: 'Agenda' },
+      text: `Côté agenda, Monsieur, vous avez aujourd'hui ${today.length > 1 ? today.length + ' rendez-vous' : 'un rendez-vous'} : ${today.map((e) => `${e.title}${Views.timeSpoken(e.time)}`).join(', puis ')}.`,
+    };
+    const i = script.findIndex((x) => x.visual && x.visual.recap);
+    const out = script.slice();
+    out.splice(i < 0 ? out.length - 1 : i, 0, seg);
+    return out;
   }
 
   function renderAll() {
     renderPill();
     renderMarkets();
+    renderPolitics();
     renderMini();
     renderNews();
+    updatePlanningBadge();
     renderChapters();
     renderTicker();
     updateProgress();
     if (!S.visual) showVisual({ type: 'intro' }, false);
     else if (S.view === 'radar') showVisual({ type: 'radar' }, false);
+    else if (PAGES.includes(S.view) && !S.playing && !$('overlay').contains(document.activeElement)) showVisual({ type: 'page', view: S.view }, false);
+  }
+
+  function renderPolitics() {
+    const items = S.briefing.politics || [];
+    $('politicsList').innerHTML = items.map((n, i) => `
+      <li><button type="button" data-pol="${i}"><span class="nt">${esc(n.title)}</span><span class="ns">${esc(n.source)} · ${esc(hhmm(n.time))}</span></button></li>`).join('')
+      || '<li class="rc-empty">Pas d\'actualité politique pour le moment.</li>';
+  }
+
+  // Mini-onglets « Bourse / Politique »
+  function setMini(name) {
+    S.mini = name;
+    document.querySelectorAll('.mini-tab').forEach((t) => { const on = t.dataset.mini === name; t.classList.toggle('active', on); t.setAttribute('aria-selected', String(on)); });
+    $('paneBourse').hidden = name !== 'bourse';
+    $('panePolitique').hidden = name !== 'politique';
+    const pane = name === 'bourse' ? $('paneBourse') : $('panePolitique');
+    pane.classList.remove('pane-in'); void pane.offsetWidth; pane.classList.add('pane-in');
+    if (name === 'bourse') drawSparklines();
+  }
+
+  function updatePlanningBadge() {
+    const n = Views.Planning.todayCount();
+    const b = $('planningBadge');
+    b.hidden = !n;
+    b.textContent = n;
   }
 
   function renderPill() {
     const l = S.briefing.live;
     const p = $('livePill');
     const full = l.markets === true && l.news;
+    $('miniLive').classList.toggle('on', l.markets !== false || l.politics);
     const none = l.markets === false && !l.news;
     p.className = 'pill ' + (full ? 'pill-live' : none ? 'pill-demo' : 'pill-partial');
     p.textContent = full ? 'LIVE' : none ? 'DÉMO' : 'PARTIEL';
@@ -181,7 +228,7 @@
     });
     const seg = S.script[S.idx];
     const ni = seg && seg.visual.type === 'news' ? seg.visual.index : -1;
-    $('newsList').querySelectorAll('li').forEach((li, i) => li.classList.toggle('current', i === ni && seg.host && (S.playing || S.idx > 0) && !/^Place à/.test(seg.text)));
+    $('newsList').querySelectorAll('li').forEach((li, i) => li.classList.toggle('current', i === ni && (S.playing || S.idx > 0)));
   }
 
   // ---------- Scène ----------
@@ -200,14 +247,14 @@
     if (!v || !S.briefing) return;
     if (v.type !== 'detail') closeDetail(true);
     S.visual = v;
-    $('stage').querySelector('.stage-body').classList.toggle('radar-mode', v.type === 'radar');
+    $('stage').querySelector('.stage-body').classList.toggle('page-mode', v.type === 'radar' || v.type === 'page');
     const b = S.briefing;
     switch (v.type) {
       case 'intro': {
         chart.clear();
         setStage('Morning économique', longDate());
         setOverlay(`<div class="ov-center"><div class="ov-logo">ROCKET</div><div class="ov-date">${esc(longDate())}</div>
-          <div class="ov-prog">${['Europe', 'Wall Street', 'Asie', 'Taux et devises', 'Matières premières', 'Radar invest', 'Actualité'].map((x) => `<span>${x}</span>`).join('')}</div></div>`);
+          <div class="ov-prog">${['Europe', 'Wall Street', 'Asie', 'Taux et devises', 'Matières premières', 'Radar invest', 'Actualité', 'Politique'].map((x) => `<span>${x}</span>`).join('')}</div></div>`);
         break;
       }
       case 'outro': {
@@ -251,6 +298,23 @@
         setStage('Actualité', `${v.index + 1} / ${b.news.length}`);
         const title = n.link ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a>` : esc(n.title);
         setOverlay(`<article class="news-card"><div class="nc-top">Actu ${v.index + 1} / ${b.news.length} · ${esc(n.source)}</div><div class="nc-title">${title}</div><div class="nc-meta">${esc(hhmm(n.time))}</div></article>`);
+        break;
+      }
+      case 'politics': {
+        chart.clear();
+        const list = b.politics || [];
+        const n = list[v.index];
+        if (!n) return;
+        setStage('Politique', `${v.index + 1} / ${list.length}`);
+        const title = n.link ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a>` : esc(n.title);
+        setOverlay(`<article class="news-card politics"><div class="nc-top">Politique ${v.index + 1} / ${list.length} · ${esc(n.source)}</div><div class="nc-title">${title}</div><div class="nc-meta">${esc(hhmm(n.time))}</div></article>`);
+        break;
+      }
+      case 'page': {
+        chart.clear();
+        const [t, meta] = PAGE_TITLES[v.view];
+        setStage(t, meta);
+        setOverlay(Views.render(v.view));
         break;
       }
       case 'custom': {
@@ -308,7 +372,7 @@
     if (!S.detail && S.visual && S.visual.type !== 'detail') S.prevVisual = S.visual;
     S.detail = { symbol, period };
     S.visual = { type: 'detail', symbol, period };
-    $('stage').querySelector('.stage-body').classList.remove('radar-mode');
+    $('stage').querySelector('.stage-body').classList.remove('page-mode');
     setOverlay('');
     $('periodTabs').hidden = false;
     $('stageClose').hidden = false;
@@ -361,7 +425,7 @@
       <div class="gauge" title="RSI"><i style="left:${rsiPos}%"></i></div>
       <div class="gauge-labels"><span>survente &lt; 30</span><span>surachat &gt; 70</span></div>
       <div class="ds-badges">${sig.map((x) => `<span class="badge ${x.kind}" title="${esc(x.text)}">${esc(x.title)}</span>`).join('')}</div>
-      <button type="button" class="btn-ghost" id="analyseBtn" data-sym="${esc(m.symbol)}">◉ Analyse de Nova</button>`;
+      <button type="button" class="btn-ghost" id="analyseBtn" data-sym="${esc(m.symbol)}">◉ Analyse de Rocket</button>`;
   }
 
   function closeDetail(silent) {
@@ -382,10 +446,7 @@
 
   // ---------- Sous-titres ----------
   const sub = { words: [], spans: [], cum: [], last: -1 };
-  function setSubtitle(speaker, text) {
-    const sp = $('subSpeaker');
-    sp.textContent = speaker === 'co' ? 'ATLAS' : 'NOVA';
-    sp.classList.toggle('co', speaker === 'co');
+  function setSubtitle(text) {
     const el = $('subText');
     el.classList.remove('status');
     const words = text.split(/\s+/).filter(Boolean);
@@ -411,10 +472,7 @@
     }
     sub.last = idx;
   }
-  function setStatus(text, speaker = 'lead') {
-    const sp = $('subSpeaker');
-    sp.textContent = speaker === 'co' ? 'ATLAS' : 'NOVA';
-    sp.classList.toggle('co', speaker === 'co');
+  function setStatus(text) {
     const el = $('subText');
     el.classList.add('status');
     el.textContent = text;
@@ -423,15 +481,14 @@
 
   function setHost(h) {
     S.host = h;
-    $('badgeLead').classList.toggle('on', h === 'lead');
-    $('badgeCo').classList.toggle('on', h === 'co');
+    document.querySelector('.core-wrap').classList.toggle('speaking', !!h);
   }
 
   // ---------- Noyau vocal ----------
   const core = { raf: 0, last: 0, t0: performance.now(), g: null, size: 320 };
   function setCore(state) {
     S.coreState = state;
-    $('coreBtn').classList.toggle('breathe', state === 'idle');
+    document.querySelector('.core-wrap').classList.toggle('breathe', state === 'idle');
     startCore();
   }
   function startCore() {
@@ -487,7 +544,7 @@
     const g = core.g, C = Theme.colors(), px = core.px, k = px / 320;
     const t = (now - core.t0) / 1000;
     const st = S.coreState;
-    const rgb = S.host === 'co' ? C.coRgb : (st === 'listening' || st === 'thinking') ? C.accentRgb : C.leadRgb;
+    const rgb = st === 'listening' ? C.redRgb : st === 'thinking' ? C.accentRgb : C.rocketRgb;
     const sp = coreSprites(rgb, px);
     let lvl = level;
     if (st === 'listening') lvl = 0.35 + 0.25 * Math.sin(t * 5);
@@ -523,18 +580,19 @@
     if (from >= S.script.length) from = 0;
     S.idx = from;
     updatePlayBtn();
-    if (S.view === 'radar') setView('briefing', true);
+    if (S.view !== 'briefing') setView('briefing', true);
     while (S.idx < S.script.length && token === S.runToken) {
       const seg = S.script[S.idx];
-      if (!S.detail) showVisual(seg.visual);
-      else S.prevVisual = seg.visual;
+      // Si l'utilisateur consulte un autre onglet, le podcast continue sans changer la scène.
+      if (S.detail) S.prevVisual = seg.visual;
+      else if (S.view === 'briefing') showVisual(seg.visual);
       updateProgress();
-      setSubtitle(seg.speaker, seg.text);
-      setHost(Voice.solo ? 'lead' : seg.speaker);
+      setSubtitle(seg.text);
+      setHost('rocket');
       setCore('speaking');
       const next = S.script[S.idx + 1];
-      if (next) Voice.prefetch(next.text, next.speaker);
-      const ok = await Voice.speak(seg.text, seg.speaker, setSubProgress);
+      if (next) Voice.prefetch(next.text);
+      const ok = await Voice.speak(seg.text, setSubProgress);
       if (token !== S.runToken) return;
       if (!ok && !S.paused) break;
       setSubProgress(1);
@@ -601,34 +659,71 @@
     });
     if (silent) return;
     if (view === 'radar') showVisual({ type: 'radar' });
+    else if (PAGES.includes(view)) showVisual({ type: 'page', view });
     else {
       const seg = S.script[S.idx];
       showVisual(seg && (S.playing || S.idx > 0) ? seg.visual : { type: 'intro' });
     }
   }
 
-  // ---------- Questions à Nova ----------
+  // ---------- Demandes à Rocket ----------
+  // Ouvre l'onglet demandé par Rocket (y compris les mini-onglets Bourse / Politique).
+  function openTab(tab) {
+    if (!tab) return;
+    if (tab === 'bourse' || tab === 'politique') { setMini(tab); return; }
+    if (tab === 'briefing' || tab === 'radar' || PAGES.includes(tab)) setView(tab);
+  }
+
+  // Lit un texte avec la voix de Rocket (hors podcast).
+  async function sayText(text) {
+    if (S.playing) stopPlayback(); else Voice.stop();
+    setSubtitle(text);
+    setHost('rocket');
+    setCore('speaking');
+    const ok = await Voice.speak(text, setSubProgress);
+    setHost(null);
+    if (S.coreState === 'speaking') setCore('idle');
+    return ok;
+  }
+
+  // Règle : « Ok Rocket … s'il te plaît ». Renvoie true si la demande est exécutée.
+  function submit(raw) {
+    const p = Command.parse(raw);
+    if (!p.complete) {
+      setStatus(p.wake ? "Terminez votre demande par « s'il te plaît », Monsieur." : Command.HINT);
+      const r = document.querySelector('.sub-rule');
+      r.classList.remove('flash'); void r.offsetWidth; r.classList.add('flash');
+      return false;
+    }
+    S.autoPaused = false;
+    $('askInput').value = '';
+    if (!p.question) { sayText(SORRY); return true; }
+    ask(p.question);
+    return true;
+  }
+
   async function ask(question, opts = {}) {
     question = String(question || '').trim();
     if (!question) return;
     if (S.asking) return;
     S.asking = true;
     Listen.cancel();
-    const wasPlaying = S.playing;
-    if (wasPlaying) stopPlayback(); else Voice.stop();
+    if (S.playing) stopPlayback(); else Voice.stop();
     setHost(null);
     setCore('thinking');
-    setStatus('Nova réfléchit…');
-    $('askInput').value = '';
+    setStatus('Rocket réfléchit…');
     let result = null;
     try {
       const r = await fetch('/api/ask', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, history: S.history.slice(-6), deezerUser: getDeezerUser() }),
+        body: JSON.stringify({
+          question, history: S.history.slice(-6), deezerUser: getDeezerUser(),
+          context: { planning: Views.Planning.list(), coach: Views.Coach.summary() },
+        }),
       });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
-        result = { answer: j.error || "Je n'arrive pas à répondre pour le moment." };
+        result = { answer: j.error || "Désolé Monsieur, je n'arrive pas à répondre pour le moment." };
       } else {
         const reader = r.body.getReader();
         const dec = new TextDecoder();
@@ -649,67 +744,123 @@
         if (!result && buf.trim()) { try { result = JSON.parse(buf); } catch (e) { /* ignore */ } }
       }
     } catch (e) {
-      result = { answer: 'Le serveur Rocket ne répond pas. Vérifiez que le Terminal est toujours ouvert.' };
+      result = { answer: 'Le serveur Rocket ne répond pas, Monsieur. Vérifiez que la fenêtre du Terminal est toujours ouverte.' };
     }
     S.asking = false;
-    if (!result) result = { answer: "Je n'ai pas compris." };
-    let answer = result.answer || '';
+    if (!result) result = { answer: SORRY };
+    let answer = result.answer || SORRY;
     if (result.music) {
       const extra = Music.handle(result.music);
       if (extra) answer += ' ' + extra;
     }
+    const action = result.action;
+    // Actions sur les données personnelles (stockées dans le navigateur).
+    if (action === 'planning-add' && result.event) { Views.Planning.add(result.event); }
+    if (action === 'planning-remove' && result.removeId) { Views.Planning.remove(result.removeId); }
+    if (action === 'coach-log' && result.habit) { Views.Coach.log(result.habit, Number(result.delta) || 1); }
+    if (result.recipeId) Views.showRecipe(result.recipeId);
     if (result.visual) {
       const keep = opts.keepVisual && !['custom', 'figure'].includes(result.visual.type);
       if (!keep) {
-        if (result.visual.type === 'radar') setView('radar', true);
+        setView(result.visual.type === 'radar' ? 'radar' : 'briefing', true);
         showVisual(result.visual);
       }
     }
+    if (result.tab) openTab(result.tab);
+    else if (action === 'radar') setView('radar');
     S.history.push({ q: question, a: answer });
     if (S.history.length > 12) S.history.shift();
-    const action = result.action;
     if (action === 'stop') {
       stopPlayback();
       Music.stop();
-      setStatus(answer || "D'accord.");
+      setStatus(answer);
       setCore('idle');
       return;
     }
-    if (action === 'radar') setView('radar', true);
     if (action === 'play' || action === 'next') {
-      setSubtitle('lead', answer);
-      setHost('lead');
-      await Voice.speak(answer, 'lead', setSubProgress);
+      await sayText(answer);
       run(action === 'next' ? S.idx + 1 : S.idx);
       return;
     }
-    setSubtitle('lead', answer);
-    setHost('lead');
-    setCore('speaking');
-    const ok = await Voice.speak(answer, 'lead', setSubProgress);
-    setHost(null);
-    setCore('idle');
-    // Conversation : Nova réécoute quelques secondes sans mot d'appel.
-    if (ok && Listen.enabled && !S.asking && !S.playing) {
-      const q = await Listen.once({ maxWaitMs: 5000, beep: 'soft', quiet: true });
-      if (q && !S.asking) ask(q);
-      else if (S.coreState === 'listening' && !S.asking) setCore('idle');
-    }
+    await sayText(answer);
   }
 
-  function listenOnce() {
-    if (!Listen.supported) {
-      setStatus('La reconnaissance vocale n\'est pas disponible dans ce navigateur (utilisez Chrome ou Edge). Tapez votre question ci-dessous.');
-      $('askInput').focus();
-      return;
-    }
-    if (S.playing) stopPlayback(); else Voice.stop();
-    $('micBtn').classList.add('listening');
-    Listen.once({ maxWaitMs: 8000, beep: true }).then((q) => {
-      $('micBtn').classList.remove('listening');
-      if (q) ask(q);
-      else { setCore('idle'); setStatus("Je n'ai rien entendu. Réessayez, ou tapez votre question."); }
-    });
+  // ---------- Boutons « Parler » et « Maintenir » ----------
+  function pauseForListening() {
+    if (S.playing && !S.paused) { togglePlay(); S.autoPaused = true; }
+    else if (!S.playing) Voice.stop();
+  }
+  function resumeAfterListening() {
+    if (S.autoPaused && S.playing && S.paused) togglePlay();
+    S.autoPaused = false;
+  }
+
+  function updateTalkUI(st) {
+    const talk = $('talkBtn'), lock = $('lockBtn');
+    const pressed = st.listening || st.latched;
+    talk.classList.toggle('pressed', pressed);
+    talk.setAttribute('aria-pressed', String(pressed));
+    talk.querySelector('.talk-label').textContent = pressed ? 'J\'ÉCOUTE' : 'PARLER';
+    talk.querySelector('.talk-sub').textContent = st.latched ? 'en continu' : pressed ? 'Ok Rocket…' : 'à Rocket';
+    lock.classList.toggle('pressed', st.latched);
+    lock.setAttribute('aria-pressed', String(st.latched));
+    lock.querySelector('.talk-ico').textContent = st.latched ? '🔒' : '🔓';
+    lock.querySelector('.talk-sub').textContent = st.latched ? 'appuyez pour relâcher' : 'écoute continue';
+    if (pressed && !S.asking && S.coreState !== 'speaking') setCore('listening');
+    else if (!pressed && S.coreState === 'listening') setCore('idle');
+  }
+
+  function noMic() {
+    setStatus("La reconnaissance vocale n'est pas disponible dans ce navigateur (utilisez Chrome ou Edge). Tapez votre demande ci-dessous.");
+    $('askInput').focus();
+  }
+
+  async function onTalk() {
+    if (!S.started) return start();
+    if (!Listen.supported) return noMic();
+    if (Listen.latched) return; // le bouton est maintenu enfoncé par « Maintenir »
+    if (Listen.capturing) { Listen.cancel(); resumeAfterListening(); return; }
+    Voice.unlock();
+    pauseForListening();
+    setStatus('Je vous écoute, Monsieur…');
+    const raw = await Listen.once({ maxWaitMs: 15000 });
+    if (!raw) { setStatus("Je n'ai rien entendu, Monsieur."); resumeAfterListening(); return; }
+    if (!submit(raw)) resumeAfterListening();
+  }
+
+  function onLock() {
+    if (!S.started) return start();
+    if (!Listen.supported) return noMic();
+    Voice.unlock();
+    Listen.setLatched(!Listen.latched);
+    setStatus(Listen.latched ? "Écoute continue, Monsieur. Dites « Ok Rocket », votre demande, puis « s'il te plaît »." : 'Écoute continue désactivée.');
+  }
+
+  const listenHandlers = {
+    wake: () => { pauseForListening(); setCore('listening'); setStatus('Je vous écoute, Monsieur…'); },
+    command: (question, raw) => { submit(raw); },
+    incomplete: () => { setStatus("Terminez votre demande par « s'il te plaît », Monsieur."); resumeAfterListening(); if (S.coreState === 'listening' && !Listen.latched) setCore('idle'); },
+    interim: (t) => { if (t && !S.asking) setStatus(t); },
+    state: updateTalkUI,
+    error: (msg) => { setStatus(msg); setCore('idle'); },
+  };
+
+  // ---------- Rappels du planning ----------
+  async function checkReminders(now) {
+    const due = Views.Planning.due(now);
+    if (!due.length) return;
+    updatePlanningBadge();
+    const text = `Monsieur, rappel : ${due.map((e) => `${e.title}${Views.timeSpoken(e.time)}`).join(', et ')}.`;
+    if (S.asking) return setStatus(text);
+    const wasPlaying = S.playing && !S.paused;
+    if (wasPlaying) togglePlay();
+    setSubtitle(text);
+    setHost('rocket');
+    setCore('speaking');
+    await Voice.speak(text, setSubProgress);
+    setHost(null);
+    setCore('idle');
+    if (wasPlaying && S.playing && S.paused) run(S.idx);
   }
 
   function getDeezerUser() { try { return localStorage.getItem('rocket.deezer') || ''; } catch (e) { return ''; } }
@@ -718,17 +869,16 @@
   function fillSettings() {
     const cfg = S.config;
     const opts = (cfg.voices || []).map((v) => `<option value="${esc(v.id)}">${esc(v.label)}${v.gender === 'f' ? ' ♀' : ' ♂'}</option>`).join('');
-    $('voiceLead').innerHTML = opts; $('voiceCo').innerHTML = opts;
+    $('voiceSel').innerHTML = opts;
     const s = Voice.settings;
-    $('voiceLead').value = s.lead; $('voiceCo').value = s.co;
+    $('voiceSel').value = s.voice;
     $('rate').value = s.rate; $('rateOut').textContent = fmt(s.rate, 2);
-    $('solo').checked = !!s.solo;
     $('musicTarget').value = Music.target;
     $('deezerUser').value = getDeezerUser();
     const modeTxt = { edge: 'voix Microsoft (gratuites, via le serveur)', elevenlabs: 'ElevenLabs', browser: 'voix du navigateur' };
     $('ttsMode').textContent = modeTxt[Voice.mode] || Voice.mode;
     const serverVoices = Voice.mode === 'edge';
-    $('voiceLead').disabled = $('voiceCo').disabled = !serverVoices;
+    $('voiceSel').disabled = !serverVoices;
     $('aiMode').textContent = { 'claude-code': 'Claude via Claude Code (abonnement)', api: "Claude via l'API Anthropic", local: 'réponses locales (sans Claude)' }[cfg.ai] || cfg.ai;
   }
 
@@ -762,31 +912,7 @@
     setTimeout(() => { $('splash').hidden = true; }, 400);
     chart.resize();
     drawSparklines();
-    if (Listen.supported) {
-      Listen.init(listenHandlers);
-    }
     run(0);
-  }
-
-  const listenHandlers = {
-    isBusy: () => Voice.speaking() || S.asking,
-    wake: () => {
-      if (S.playing) stopPlayback(); else Voice.stop();
-      setCore('listening');
-      setStatus('Je vous écoute…');
-    },
-    question: (q) => { $('micBtn').classList.remove('listening'); ask(q); },
-    interim: (t) => { if (t) setStatus(t); },
-    listening: (quiet) => { setCore('listening'); if (!quiet) setStatus('Je vous écoute…'); },
-    timeout: () => { setCore('idle'); },
-    error: (msg) => { setStatus(msg); setCore('idle'); },
-    enabled: (on) => updateWakeBtn(on),
-  };
-
-  function updateWakeBtn(on) {
-    const b = $('wakeBtn');
-    b.setAttribute('aria-pressed', String(!!on));
-    b.innerHTML = `OK NOVA <b>${on ? 'ON' : 'OFF'}</b>`;
   }
 
   function bind() {
@@ -804,7 +930,7 @@
       const n = e.target.closest('[data-news]');
       if (n && n.tagName === 'BUTTON') {
         const i = +n.dataset.news;
-        const seg = S.script.findIndex((s) => s.visual.type === 'news' && s.visual.index === i && !/^Place à/.test(s.text));
+        const seg = S.script.findIndex((s) => s.visual.type === 'news' && s.visual.index === i);
         if (S.playing && seg >= 0) jump(seg); else showVisual({ type: 'news', index: i });
         return true;
       }
@@ -814,7 +940,19 @@
     $('marketList').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFromEvent(e); } });
     $('tickerTrack').addEventListener('click', openFromEvent);
     $('newsList').addEventListener('click', openFromEvent);
-    $('overlay').addEventListener('click', (e) => { if (!e.target.closest('a')) openFromEvent(e); });
+    document.querySelectorAll('.mini-tab').forEach((t) => t.addEventListener('click', () => setMini(t.dataset.mini)));
+    $('politicsList').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-pol]');
+      if (!b) return;
+      setView('briefing', true);
+      showVisual({ type: 'politics', index: +b.dataset.pol });
+    });
+    $('overlay').addEventListener('click', (e) => { if (!e.target.closest('a') && !e.target.closest('.page')) openFromEvent(e); });
+    Views.attach($('overlay'), {
+      rerender: () => { if (S.visual && S.visual.type === 'page') $('overlay').innerHTML = Views.render(S.visual.view); },
+      speak: (text) => sayText(text),
+      changed: (what) => { if (what === 'planning') { updatePlanningBadge(); if (!S.playing) { S.script = withPlanning(S.briefing.script); buildChapters(); renderChapters(); updateProgress(); } } },
+    });
     $('detailStats').addEventListener('click', (e) => {
       const b = e.target.closest('#analyseBtn');
       if (!b) return;
@@ -838,17 +976,14 @@
     });
     $('settingsBtn').addEventListener('click', () => { fillSettings(); $('settings').showModal(); });
 
-    $('askForm').addEventListener('submit', (e) => { e.preventDefault(); ask($('askInput').value); });
-    $('micBtn').addEventListener('click', listenOnce);
-    $('coreBtn').addEventListener('click', () => { if (!S.started) return start(); listenOnce(); });
-    $('wakeBtn').addEventListener('click', () => { Listen.setEnabled(!Listen.enabled); if (Listen.enabled) Voice.unlock(); });
-    if (!Listen.supported) { $('wakeBtn').hidden = true; } else updateWakeBtn(Listen.enabled);
+    $('askForm').addEventListener('submit', (e) => { e.preventDefault(); if (!S.started) Voice.unlock(); submit($('askInput').value); });
+    $('talkBtn').addEventListener('click', onTalk);
+    $('lockBtn').addEventListener('click', onLock);
+    Listen.init(listenHandlers);
 
     // Réglages
-    $('voiceLead').addEventListener('change', (e) => Voice.set('lead', e.target.value));
-    $('voiceCo').addEventListener('change', (e) => Voice.set('co', e.target.value));
+    $('voiceSel').addEventListener('change', (e) => Voice.set('voice', e.target.value));
     $('rate').addEventListener('input', (e) => { Voice.set('rate', +e.target.value); $('rateOut').textContent = fmt(+e.target.value, 2); });
-    $('solo').addEventListener('change', (e) => Voice.set('solo', e.target.checked));
     $('musicTarget').addEventListener('change', (e) => Music.setTarget(e.target.value));
     $('deezerCheck').addEventListener('click', checkDeezer);
     $('deezerUser').addEventListener('change', () => { try { localStorage.setItem('rocket.deezer', $('deezerUser').value.trim()); } catch (e) { /* ignore */ } });
@@ -856,8 +991,7 @@
       const b = e.target.closest('[data-test]');
       if (!b) return;
       Voice.unlock();
-      const who = b.dataset.test;
-      Voice.speak(who === 'co' ? "Bonjour, je suis Atlas, votre co-animateur." : "Bonjour, je suis Nova. Prête pour votre morning économique ?", who);
+      Voice.speak('Bonjour Monsieur, je suis Rocket. À votre service.');
     });
 
     // Clavier
@@ -881,6 +1015,7 @@
       drawCore(performance.now(), 0);
       if (S.briefing) drawSparklines();
       if (S.visual && S.visual.type === 'custom') showCustom(S.visual, false);
+      if (S.visual && S.visual.type === 'page') $('overlay').innerHTML = Views.render(S.visual.view);
     });
   }
 
@@ -904,12 +1039,18 @@
       $('splashStatus').textContent = 'Le serveur ne répond pas pour le moment.';
     }
     btn.disabled = false;
+    // Onglets dynamiques : données rafraîchies toutes les 10 minutes.
+    setInterval(() => {
+      if (S.asking || !S.briefing) return;
+      $('miniLive').classList.add('refreshing');
+      loadBriefing(false).catch(() => {}).finally(() => $('miniLive').classList.remove('refreshing'));
+    }, 10 * 60 * 1000);
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
   }
 
   // Exposé pour les tests.
-  window.RocketApp = { state: S, ask, run, jump, showVisual, openDetail, closeDetail, setView, togglePlay, stopPlayback };
+  window.RocketApp = { state: S, ask, submit, run, jump, showVisual, openDetail, closeDetail, setView, setMini, togglePlay, stopPlayback, checkReminders };
   init();
 })();

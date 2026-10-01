@@ -9,8 +9,12 @@ const assistant = require('../lib/assistant');
 const research = require('../lib/research');
 
 let n = 0;
-function test(name, fn) {
-  try { fn(); n++; console.log('  ✓ ' + name); } catch (e) { console.error('  ✗ ' + name + '\n    ' + e.message); process.exitCode = 1; }
+const queue = [];
+function test(name, fn) { queue.push([name, fn]); }
+async function runAll() {
+  for (const [name, fn] of queue) {
+    try { await fn(); n++; console.log('  ✓ ' + name); } catch (e) { console.error('  ✗ ' + name + '\n    ' + e.message); process.exitCode = 1; }
+  }
 }
 
 const markets = sources.INSTRUMENTS.map((i) => sources.summarize(i, sources.demoHistory(i), false));
@@ -51,15 +55,46 @@ test('signal de survente déclenché', () => {
   assert.ok(sig.some((s) => s.title === 'Zone de survente'));
 });
 
-test('script du podcast : déroulé complet et alternance', () => {
-  const seg = script.buildScript({ markets, news: briefing.news, radar, date: new Date(2026, 5, 1) });
-  assert.ok(seg.length >= 20);
-  assert.ok(/lundi 1er juin/.test(seg[0].text));
-  assert.strictEqual(seg[0].host, 'Nova');
-  assert.strictEqual(seg[1].host, 'Atlas');
-  assert.strictEqual(seg[seg.length - 1].text, 'Merci Nova. Excellente journée à tous, et à demain matin.');
+test('script du podcast : un seul animateur, Rocket', () => {
+  const lifestyle = require('../lib/lifestyle');
+  const seg = script.buildScript({ markets, news: briefing.news, radar, politics: sources.demoNews(), recipe: lifestyle.recipeOfDay(), tip: lifestyle.tipOfDay(), date: new Date(2026, 5, 1) });
+  assert.ok(seg.length >= 12);
+  assert.ok(/Ici Rocket/.test(seg[0].text) && /lundi 1er juin/.test(seg[0].text));
+  assert.ok(seg.every((s) => s.host === 'Rocket'), 'un seul animateur');
+  assert.ok(seg.every((s) => !/Nova|Atlas/.test(s.text)), 'plus de Nova ni d’Atlas');
+  assert.ok(seg.some((s) => s.visual.type === 'politics'), 'segment politique');
+  assert.ok(/Ok Rocket/.test(seg[seg.length - 1].text));
   assert.ok(seg.every((s) => s.visual && s.visual.type));
   assert.ok(seg.every((s) => !/\bà le\b|%|\d\s\d{3}\b/.test(s.text)), 'formes orales');
+});
+
+test('règle « Ok Rocket … s’il te plaît »', () => {
+  const C = require('../public/command');
+  assert.deepStrictEqual(C.parse("Ok Rocket, comment va le CAC 40, s'il te plaît"), { wake: true, complete: true, question: 'comment va le CAC 40' });
+  assert.strictEqual(C.parse('okay Roquette mets du jazz s’il te plait.').question, 'mets du jazz');
+  assert.deepStrictEqual(C.parse('Ok Rocket comment va le CAC'), { wake: true, complete: false, question: 'comment va le CAC' });
+  assert.strictEqual(C.parse("comment va le CAC, s'il te plaît").complete, false);
+  assert.strictEqual(C.parse("Nova, comment va le CAC, s'il te plaît").complete, false);
+  assert.strictEqual(C.parse("Ok Rocket s'il te plaît").question, '');
+});
+
+test('planning : phrases en français', () => {
+  const P = require('../lib/planning');
+  const now = new Date(2026, 9, 1, 9, 0); // jeudi 1er octobre 2026
+  assert.deepStrictEqual(P.parseAdd('ajoute rendez-vous chez le dentiste demain à 15h', now), { title: 'Rendez-vous chez le dentiste', date: '2026-10-02', time: '15:00' });
+  assert.deepStrictEqual(P.parseAdd('note réunion avec Paul lundi à 9 heures 30', now), { title: 'Réunion avec Paul', date: '2026-10-05', time: '09:30' });
+  assert.deepStrictEqual(P.parseAdd('ajoute dîner chez Julie samedi à huit heures du soir', now), { title: 'Dîner chez Julie', date: '2026-10-03', time: '20:00' });
+  assert.deepStrictEqual(P.parseAdd('ajoute rendez-vous chez le médecin le 3/11 à 10h15', now), { title: 'Rendez-vous chez le médecin', date: '2026-11-03', time: '10:15' });
+  assert.strictEqual(P.parseAdd('ajoute anniversaire de maman le 12 octobre', now).date, '2026-10-12');
+  assert.strictEqual(P.parseAdd('mets Gims', now), null);
+});
+
+test('cuisine et coach', () => {
+  const L = require('../lib/lifestyle');
+  assert.ok(L.RECIPES.length >= 12);
+  assert.ok(L.seasonalRecipes(new Date(2026, 9, 1)).every((r) => r.season.includes('automne') || r.season.includes('toutes')));
+  assert.strictEqual(L.findRecipes('une recette avec des courgettes')[0].id, 'ratatouille');
+  assert.ok(L.TIPS.length >= 15 && L.HABITS.length >= 5);
 });
 
 test('grammaire orale', () => {
@@ -99,6 +134,17 @@ test('musique : playlists du profil', () => {
 
 test('assistant : intentions locales', () => {
   const d = assistant.detectIntent;
+  assert.strictEqual(d('ouvre la cuisine').tab, 'cuisine');
+  assert.strictEqual(d('affiche la politique').tab, 'politique');
+  assert.strictEqual(d('ajoute dentiste demain à 15h').kind, 'planning-add');
+  assert.strictEqual(d("qu'est-ce que j'ai demain").kind, 'planning-query');
+  assert.strictEqual(d('supprime le dentiste').kind, 'planning-remove');
+  assert.deepStrictEqual(d("j'ai bu deux verres d'eau"), { kind: 'coach-log', habit: 'eau', delta: 2 });
+  assert.strictEqual(d('donne-moi un conseil').kind, 'coach-tip');
+  assert.strictEqual(d('un conseil d’investissement').kind, 'radar');
+  assert.strictEqual(d('une recette avec des courgettes').kind, 'recipe');
+  assert.strictEqual(d('les sorties ciné').kind, 'cinema');
+  assert.strictEqual(d("l'actu politique").kind, 'politics');
   assert.strictEqual(d('stop').action, 'stop');
   assert.strictEqual(d('tais-toi').action, 'stop');
   assert.strictEqual(d('reprends le briefing').action, 'play');
@@ -119,6 +165,24 @@ test('assistant : réponses locales chiffrées + visuel', () => {
   assert.strictEqual(assistant.localAnswer({ kind: 'radar' }, briefing).action, 'radar');
 });
 
+test('assistant : « Désolé Monsieur, je n’ai pas compris »', async () => {
+  const r = await assistant.ask({ question: 'blablabla machin truc' }, briefing, () => {});
+  assert.strictEqual(r.answer, "Désolé Monsieur, je n'ai pas compris.");
+});
+
+test('assistant : planning et coach à partir du contexte du navigateur', () => {
+  const P = require('../lib/planning');
+  const today = P.iso(new Date());
+  const ctx = { planning: [{ id: 'x1', title: 'Dentiste', date: today, time: '15:00' }], coach: { eau: 3 } };
+  const b = { ...briefing, cinema: [], politics: [] };
+  assert.ok(/Dentiste à 15 heures/.test(assistant.lifeAnswer(assistant.detectIntent('mon planning'), b, ctx).answer));
+  assert.strictEqual(assistant.lifeAnswer(assistant.detectIntent('supprime dentiste'), b, ctx).removeId, 'x1');
+  assert.ok(/4 verres sur 8/.test(assistant.lifeAnswer(assistant.detectIntent("j'ai bu un verre d'eau"), b, ctx).answer));
+  const add = assistant.lifeAnswer(assistant.detectIntent('ajoute courses demain à 18h'), b, ctx);
+  assert.strictEqual(add.action, 'planning-add');
+  assert.strictEqual(add.event.title, 'Courses');
+});
+
 test('graphiques Claude : jamais sans source', () => {
   assert.strictEqual(research.pointsVisual({ series: [{ name: 'x', points: [{ x: '2024', y: 1 }, { x: '2025', y: 2 }] }] }), null);
   const v = research.pointsVisual({ title: 'CDS', source: 'Test', series: [{ name: 'CDS', points: [{ x: '2024-01-01', y: 30 }, { x: '2025-01-01', y: 35 }] }] });
@@ -135,4 +199,4 @@ test('flux RSS : parsing Google News', () => {
   assert.strictEqual(sources.decodeEntities('L&#39;or &amp; l&apos;argent'), "L'or & l'argent");
 });
 
-console.log(`\n${n} test(s) unitaires réussis${process.exitCode ? ' — ÉCHECS ci-dessus' : ''}.`);
+runAll().then(() => console.log(`\n${n} test(s) unitaires réussis${process.exitCode ? ' — ÉCHECS ci-dessus' : ''}.`));

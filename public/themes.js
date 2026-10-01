@@ -22,7 +22,7 @@
     cached = {
       theme: current(),
       bg: v('--bg'), surface: v('--surface'), surface2: v('--surface-2'), surface3: v('--surface-3'), border: v('--border'), borderStrong: v('--border-strong'),
-      accent: v('--accent'), accentRgb: v('--accent-rgb'), leadRgb: v('--lead-rgb'), coRgb: v('--co-rgb'),
+      accent: v('--accent'), accentRgb: v('--accent-rgb'), altRgb: v('--alt-rgb'), rocketRgb: v('--rocket-rgb'),
       strong: v('--strong'), text: v('--text'), muted: v('--muted'),
       green: v('--green'), greenRgb: v('--green-rgb'), red: v('--red'), redRgb: v('--red-rgb'), amberRgb: v('--amber-rgb'),
       font: v('--font'), fontNum: v('--font-num'), glow: v('--chart-glow') === '1',

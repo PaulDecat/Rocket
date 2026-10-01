@@ -1,138 +1,120 @@
-# 🚀 Rocket — votre morning économique
+# 🚀 Rocket v2 — votre assistant du matin
 
-Chaque matin, **Nova** (présentatrice) et **Atlas** (co-animateur) vous lisent un point économique sous forme de
-podcast : Bourses européennes, Wall Street, Asie, taux et devises, matières premières, radar investissement et
-actualité. Des graphiques s'affichent en même temps que la parole.
+Chaque matin, **Rocket** vous lit un point complet : Bourses, taux et devises, matières premières, radar
+investissement, actualité économique et politique, votre agenda du jour, une idée de recette et un conseil
+bien-être. Des graphiques s'affichent pendant qu'il parle.
 
-Vous pouvez aussi **parler à Nova** : dites « **OK Nova** » puis votre question (« comment va le bitcoin ? »,
-« montre-moi le CDS à 5 ans de la France », « mets du jazz »…).
+Rocket a aussi des onglets **Cuisine**, **Ciné**, **Coach hygiène de vie** et **Planning**, et vous pouvez
+**lui parler**.
+
+> La version 1 (avec Nova et Atlas) reste disponible :
+> <https://github.com/PaulDecat/Rocket/archive/2ccb6165a41820e973bcd36aa1c50007151c37de.zip>
 
 ---
 
 ## 1. Installer (une seule fois)
 
-1. **Installez Node.js** : allez sur <https://nodejs.org>, cliquez sur le gros bouton **LTS**, puis installez le
-   fichier téléchargé (suivant, suivant, terminer).
-2. **Ouvrez le Terminal** (sur Mac : touches `Cmd + Espace`, tapez « Terminal », Entrée).
-3. Tapez `cd ` (avec un espace après), puis **glissez le dossier Rocket** dans la fenêtre du Terminal, et appuyez sur Entrée.
-4. Tapez la commande suivante puis Entrée (elle télécharge ce dont Rocket a besoin, ça prend une minute) :
+1. Installez **Node.js** : <https://nodejs.org>, gros bouton **LTS**, puis suivant, suivant, terminer.
+2. Ouvrez un terminal **dans le dossier Rocket** :
+   - **Windows** : ouvrez le dossier Rocket, cliquez dans la barre d'adresse en haut, tapez `cmd`, Entrée.
+   - **Mac** : Terminal, tapez `cd ` (avec un espace), glissez le dossier Rocket dans la fenêtre, Entrée.
+3. Tapez `npm install` puis Entrée (une minute environ).
 
-   ```
-   npm install
-   ```
+## 2. Lancer Rocket
 
-## 2. Lancer Rocket (chaque matin)
+- **Windows** : double-cliquez sur **`Lancer Rocket.bat`** (il ouvre aussi la page dans le navigateur).
+- **Autre méthode** : dans le terminal du dossier, tapez `npm start`, puis ouvrez **Chrome** ou **Edge** à
+  l'adresse <http://localhost:3000>.
 
-1. Dans le Terminal (dans le dossier Rocket, voir étape 3 ci-dessus), tapez :
+Choisissez votre style, puis cliquez sur **▶ Lancer le morning**. Pour arrêter : fermez la fenêtre noire,
+ou appuyez sur `Ctrl + C` dedans.
 
-   ```
-   npm start
-   ```
+---
 
-2. Ouvrez **Chrome** (ou Edge) à l'adresse <http://localhost:3000>.
-3. Choisissez votre style, puis cliquez sur **▶ Lancer le morning**.
+## 3. Parler à Rocket
 
-Pour **arrêter** Rocket : revenez dans le Terminal et appuyez sur `Ctrl + C`.
+**La règle : Rocket n'exécute une demande que si la phrase commence par « Ok Rocket » et se termine par
+« s'il te plaît ».**
 
-Pour **mettre à jour** Rocket : remplacez le dossier par la nouvelle version, puis refaites `npm install`.
+> « **Ok Rocket**, comment va le CAC 40, **s'il te plaît** »
 
-### Raccourcis
+Sinon, il ne fait rien (un rappel de la règle s'affiche sous les sous-titres). Si la phrase respecte la
+règle mais qu'il ne comprend pas la demande, il répond : « **Désolé Monsieur, je n'ai pas compris.** »
+La règle vaut aussi pour la barre de texte.
 
-| Touche | Action |
+### Les deux boutons
+
+| Bouton | Ce qu'il fait |
 |---|---|
-| Espace | lecture / pause |
-| ← → | réplique précédente / suivante |
-| / | écrire une question à Nova |
-| Échap | fermer la fiche d'un marché |
+| 🎙 **PARLER** | Appuyez une fois : il devient **rouge**, Rocket écoute votre demande. Il revient à son état initial après la demande. Réappuyez pour annuler. |
+| 🔓 **MAINTENIR** | Appuyez : il devient **orange** 🔒 et garde **PARLER enfoncé** : Rocket écoute en continu. Réappuyez sur MAINTENIR : PARLER retrouve son état initial. |
+
+Le micro fonctionne dans **Chrome** ou **Edge** (autorisez le micro quand le navigateur le demande).
+
+### Exemples (toujours avec « Ok Rocket … s'il te plaît »)
+
+- **Marchés** : « comment va le bitcoin », « quel est le gros coup du jour », « montre-moi le CDS à 5 ans de la France »
+- **Briefing** : « reprends le briefing », « suivant », « stop »
+- **Onglets** : « ouvre la cuisine », « affiche le planning », « affiche la politique », « affiche la bourse »
+- **Planning** : « ajoute dentiste demain à 15 heures », « note réunion avec Paul lundi à 9 heures 30 »,
+  « qu'est-ce que j'ai demain », « mon agenda de la semaine », « supprime le dentiste »
+- **Coach** : « j'ai bu deux verres d'eau », « j'ai marché », « j'ai mangé une pomme », « mon bilan », « donne-moi un conseil »
+- **Cuisine** : « une recette avec des courgettes », « la recette du jour en entier », « une autre recette »
+- **Ciné / politique** : « les sorties ciné », « l'actu politique »
+- **Musique** : « mets du jazz », « mets ma playlist Sport », « coupe la musique »
 
 ---
 
-## 3. Donner un « cerveau » à Nova avec Claude (recommandé)
+## 4. Les onglets
 
-Sans Claude, Nova répond déjà aux questions simples sur les marchés du jour. Avec Claude, elle peut
-**chercher sur le web** (CDS, inflation, taux de la BCE, une entreprise…) et afficher le graphique qui va avec.
+| Onglet | Contenu |
+|---|---|
+| 📈 **Briefing** | Le morning en podcast, avec graphiques synchronisés. |
+| ◎ **Radar** | Opportunités, tendances fortes et points de vigilance (signaux techniques, pas des conseils personnalisés). |
+| 🍳 **Cuisine** | Recette du jour (de saison), ingrédients, étapes, « Lire la recette », « Autre idée ». |
+| 🎬 **Ciné** | Les dernières actualités du cinéma. |
+| 💪 **Coach** | 6 habitudes du jour (eau, marche, fruits et légumes, respiration, écrans, coucher) et un conseil bien-être. Remise à zéro chaque jour. |
+| 📅 **Planning** | Vos rendez-vous. Rocket vous les rappelle **à voix haute** à l'heure prévue (laissez la page ouverte). Le nombre de rendez-vous du jour s'affiche sur l'onglet. |
 
-Si vous avez un abonnement Claude, Rocket utilise **Claude Code**, sans frais supplémentaires :
+À gauche, les **mini-onglets Bourse / Politique** affichent les indicateurs de marché ou les titres politiques.
+Ils se mettent à jour automatiquement toutes les 10 minutes (pastille verte).
 
-1. Dans le Terminal, tapez :
-
-   ```
-   npm install -g @anthropic-ai/claude-code
-   ```
-
-   Sur Mac, si un message contient « EACCES », tapez plutôt `sudo npm install -g @anthropic-ai/claude-code`
-   (votre mot de passe de session vous est demandé ; rien ne s'affiche quand vous le tapez, c'est normal).
-2. Tapez `claude`, puis suivez les instructions pour vous connecter à votre compte Claude.
-3. Une fois connecté, tapez `/exit`.
-4. Relancez Rocket (`Ctrl + C` puis `npm start`). Le Terminal affiche alors : **Réponses : Claude via Claude Code**.
-
-Autre possibilité : une **clé API** Anthropic (facturée à l'usage). Copiez le fichier `.env.example` en `.env`
-et renseignez `ANTHROPIC_API_KEY=...`.
+Votre planning et vos habitudes restent **dans votre navigateur** (rien n'est envoyé sur Internet).
 
 ---
 
-## 4. Les voix
+## 5. Donner plus d'intelligence à Rocket avec Claude (recommandé)
 
-- Par défaut, Rocket utilise les **voix neuronales de Microsoft**, gratuites et très naturelles
-  (il faut une connexion Internet). Dans les réglages ⚙, vous pouvez choisir la voix de Nova et celle d'Atlas,
-  la vitesse, ou garder **Nova seule**.
-- Si ces voix ne répondent pas, Rocket passe tout seul sur les **voix de votre navigateur**. Sur Mac, les voix
-  « Premium » sont bien meilleures : Réglages Système → Accessibilité → Contenu énoncé → Voix du système →
-  Gérer les voix → Français → téléchargez par exemple « Audrey (Premium) » et « Thomas (Premium) ».
-- Option payante : **ElevenLabs** (voir `.env.example`).
+Sans Claude, Rocket répond aux demandes ci-dessus. Avec Claude, il peut **chercher sur le web**
+(CDS, inflation, une entreprise, une recette originale…).
 
-## 5. « OK Nova »
+1. Dans un terminal : `npm install -g @anthropic-ai/claude-code` (sur Mac, ajoutez `sudo` devant si « EACCES »).
+2. Tapez `claude`, connectez-vous à votre compte, puis tapez `/exit`.
+3. Relancez Rocket : le terminal affiche **Réponses : Claude via Claude Code**.
 
-- Fonctionne dans **Chrome** ou **Edge** (pas dans Firefox : utilisez alors la barre de question).
-- Au premier lancement, le navigateur demande l'accès au **micro** : cliquez sur **Autoriser**.
-- Le bouton **OK NOVA ON/OFF** active ou coupe l'écoute.
-- Dites « OK Nova » : un bip retentit, posez votre question. Ou tout d'un coup : « OK Nova, comment va le CAC 40 ? ».
-- Pendant que Nova parle, dites « OK Nova » pour l'interrompre.
-- Après une réponse, Nova vous réécoute quelques secondes : vous pouvez enchaîner sans redire « OK Nova ».
-- Le micro ne fonctionne qu'à l'adresse `localhost` ou en `https` (règle des navigateurs).
+Autre possibilité : une clé API Anthropic dans un fichier `.env` (voir `.env.example`).
 
-Exemples : « stop », « reprends le briefing », « suivant », « quel est le gros coup du jour ? »,
-« quelles sont les actus ? », « montre-moi le CDS à 5 ans de la France ».
+## 6. Voix, musique, téléphone
 
-## 6. La musique (Deezer)
+- **Voix** : voix Microsoft gratuites (Internet nécessaire), sinon voix du navigateur. Réglages ⚙ : voix de
+  Rocket et vitesse.
+- **Musique Deezer** : sur Mac dans l'appli Deezer ; sur Windows dans le lecteur intégré (souvent des extraits
+  de 30 secondes). Vos playlists : collez le lien de votre profil Deezer dans ⚙ (profil et playlists publics).
+- **Téléphone** : le terminal affiche une adresse « Sur le Wi-Fi » à ouvrir sur le téléphone (même Wi-Fi).
+  Par sécurité, les demandes à Rocket restent réservées à l'ordinateur. Pour l'utiliser partout : déploiement
+  sur [Render](https://render.com) avec le fichier `render.yaml`.
 
-Dites par exemple : « mets Gims », « joue la chanson Bella de Gims », « lance l'album Civilisation d'Orelsan »,
-« mets la playlist Chill », « mets du jazz », « mets de la musique », « coupe la musique », « reprends la musique ».
-
-- Sur Mac, la musique se lance dans **l'appli Deezer** de l'ordinateur (morceaux complets, votre compte).
-  Sinon, un **lecteur intégré** s'affiche (souvent limité à des extraits de 30 secondes).
-- **Vos playlists** (« mets ma playlist Sport », « mets mes coups de cœur », « quelles sont mes playlists ») :
-  dans Deezer, ouvrez votre profil → **Partager** → **Copier le lien**, puis collez-le dans ⚙ → Profil Deezer →
-  **Vérifier**. Votre profil et vos playlists doivent être **publics**.
-
-## 7. Sur votre téléphone
-
-- **À la maison** : quand Rocket tourne sur l'ordinateur, le Terminal affiche une adresse « Sur le Wi-Fi »
-  (par exemple `http://192.168.1.20:3000`). Ouvrez-la sur le téléphone connecté au même Wi-Fi.
-  Par sécurité, les questions à Nova et la musique restent réservées à l'ordinateur.
-- **Partout** : déployez Rocket gratuitement sur [Render](https://render.com) (New → Blueprint → votre dépôt ;
-  le fichier `render.yaml` est prêt). Ajoutez `ANTHROPIC_API_KEY` si vous voulez Claude. Attention : toute
-  personne qui connaît l'adresse peut alors poser des questions (facturées sur votre clé) ; ne la partagez pas.
-  Sur le téléphone, ouvrez l'adresse dans Safari → Partager → **Sur l'écran d'accueil** : Rocket s'ouvre alors
-  comme une application.
-
-## 8. En cas de problème
+## 7. En cas de problème
 
 | Problème | Solution |
 |---|---|
-| « EADDRINUSE » au lancement | Rocket tourne déjà. Fermez l'autre fenêtre, ou tapez `lsof -ti :3000 \| xargs kill` puis relancez. |
-| Pastille rouge **DÉMO** | Les sources (Yahoo Finance, flux d'actualités) sont injoignables : Rocket affiche des données de démonstration. Vérifiez Internet puis cliquez sur ⟳. |
-| Pastille orange **PARTIEL** | Une partie des sources ne répond pas ; le reste est en direct. |
-| Nova n'entend rien | Autorisez le micro (icône du cadenas dans la barre d'adresse), utilisez Chrome, vérifiez que OK NOVA est sur ON. |
-| Pas de son | Cliquez d'abord sur « Lancer le morning » (les navigateurs exigent un clic), vérifiez le volume. |
-| Nova ne sait pas répondre aux questions web | Installez Claude Code (partie 3). Le Terminal doit afficher « Réponses : Claude via Claude Code ». |
+| Rocket ne réagit pas | Commencez par « Ok Rocket » et terminez par « s'il te plaît ». |
+| « EADDRINUSE » | Rocket tourne déjà : fermez l'autre fenêtre (Mac : `lsof -ti :3000 \| xargs kill`). |
+| `npm` n'est pas reconnu | Installez Node.js, puis fermez et rouvrez le terminal. |
+| Pastille **DÉMO** | Sources injoignables : données de démonstration. Vérifiez Internet puis cliquez sur ⟳. |
+| Le micro ne marche pas | Chrome ou Edge, micro autorisé (icône du cadenas dans la barre d'adresse). |
+| Pas de son | Cliquez d'abord sur « Lancer le morning » (les navigateurs exigent un clic). |
 
 ---
 
-## Pour les curieux
-
-- `npm test` lance les tests (les tests de bout en bout utilisent Playwright s'il est installé).
-- Structure : `server.js` (serveur), `lib/` (données, indicateurs, script du podcast, Nova, voix, musique),
-  `public/` (interface).
-- Les signaux du radar sont des indicateurs techniques automatiques à visée pédagogique, **pas des conseils
-  en investissement personnalisés**.
+`npm test` lance les tests automatiques (Playwright facultatif pour les tests dans le navigateur).

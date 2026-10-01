@@ -28,6 +28,7 @@ const { buildScript } = require('./lib/script');
 const assistant = require('./lib/assistant');
 const tts = require('./lib/tts-edge');
 const music = require('./lib/music');
+const lifestyle = require('./lib/lifestyle');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -45,15 +46,18 @@ let cache = null, pending = null;
 const TTL = 10 * 60 * 1000;
 
 async function buildBriefing() {
-  const [markets, news] = await Promise.all([sources.getMarkets(), sources.getNews()]);
+  const [markets, news, politics, cinema] = await Promise.all([sources.getMarkets(), sources.getNews(), sources.getPolitics(), sources.getCinema()]);
   for (const m of markets) m.stats = signals.computeStats(m);
   const radar = signals.buildRadar(markets);
-  const script = buildScript({ markets, news: news.items, radar });
+  const recipe = lifestyle.recipeOfDay();
+  const tip = lifestyle.tipOfDay();
+  const script = buildScript({ markets, news: news.items, radar, politics: politics.items, recipe, tip });
   const liveCount = markets.filter((m) => m.live).length;
   return {
     generatedAt: Date.now(),
-    live: { markets: liveCount === markets.length ? true : liveCount === 0 ? false : 'partial', news: news.live },
-    markets, news: news.items, radar, script,
+    live: { markets: liveCount === markets.length ? true : liveCount === 0 ? false : 'partial', news: news.live, politics: politics.live, cinema: cinema.live },
+    markets, news: news.items, politics: politics.items, cinema: cinema.items, radar, script,
+    lifestyle: { recipeOfDay: recipe.id, recipes: lifestyle.seasonalRecipes(), allRecipes: lifestyle.RECIPES, season: lifestyle.season(), tip, tips: lifestyle.TIPS, habits: lifestyle.HABITS },
   };
 }
 
@@ -125,7 +129,7 @@ async function handle(req, res) {
 
   if (p === '/api/config' && req.method === 'GET') {
     return sendJson(res, 200, {
-      name: 'Rocket', tts: tts.provider(), voices: tts.VOICES, defaultVoices: tts.DEFAULT_VOICES,
+      name: 'Rocket', tts: tts.provider(), voices: tts.VOICES, defaultVoice: tts.DEFAULT_VOICE, version: 2,
       ai: assistant.getMode(), local: isLocal(req),
     });
   }
@@ -150,7 +154,7 @@ async function handle(req, res) {
     const emit = (o) => { if (!res.writableEnded) res.write(JSON.stringify(o) + '\n'); };
     try {
       const briefing = await getBriefing(false);
-      const result = await assistant.ask({ question: body.question, history: body.history, deezerUser: body.deezerUser }, briefing, emit);
+      const result = await assistant.ask({ question: body.question, history: body.history, deezerUser: body.deezerUser, context: body.context }, briefing, emit);
       emit({ type: 'result', ...result });
     } catch (e) {
       console.error('[ask]', e);
@@ -163,7 +167,7 @@ async function handle(req, res) {
     const body = await readBody(req);
     if (typeof body.text !== 'string' || !body.text.trim()) return sendJson(res, 400, { error: 'Texte manquant' });
     try {
-      const buf = await tts.synthesize({ text: body.text, speaker: body.speaker, voice: typeof body.voice === 'string' ? body.voice : '', rate: body.rate });
+      const buf = await tts.synthesize({ text: body.text, voice: typeof body.voice === 'string' ? body.voice : '', rate: body.rate });
       res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
       return res.end(buf);
     } catch (e) {
@@ -214,7 +218,7 @@ if (require.main === module) {
     process.exit(1);
   });
   server.listen(PORT, HOST, async () => {
-    console.log('\n  🚀 ROCKET — votre morning économique');
+    console.log('\n  🚀 ROCKET v2 — votre morning économique');
     console.log(`  Sur cet ordinateur : http://localhost:${PORT}`);
     for (const a of lanAddresses()) console.log(`  Sur le Wi-Fi       : http://${a}:${PORT}`);
     const voice = tts.provider();
