@@ -10,7 +10,7 @@ Rocket a aussi des onglets **Cuisine**, **Ciné**, **Coach hygiène de vie** et 
 > Anciennes versions :
 > v1 (Nova et Atlas) <https://github.com/PaulDecat/Rocket/archive/2ccb6165a41820e973bcd36aa1c50007151c37de.zip> ·
 > v2 <https://github.com/PaulDecat/Rocket/archive/640944de63e88e35ca1c1138c063e504ddbdcd4b.zip> ·
-> v3 <https://github.com/PaulDecat/Rocket/archive/9bd3d1d.zip>
+> v3 <https://github.com/PaulDecat/Rocket/archive/ef08f62621873e912bee1cfe21348f41bee582d3.zip>
 
 ---
 
