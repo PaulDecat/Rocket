@@ -1,17 +1,22 @@
 // Moteur vocal local de Rocket : Whisper (OpenAI) exécuté dans le navigateur avec Transformers.js.
-// Le modèle (~80 Mo) est téléchargé une seule fois, puis gardé en cache par le navigateur.
+// Le modèle est téléchargé une seule fois, puis gardé en cache par le navigateur :
+// « rapide » = Whisper base (~80 Mo), « précis » = Whisper small (~250 Mo, bien meilleur en français).
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0';
 
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 
 // Modèles des démonstrations officielles de Transformers.js (WebGPU et WebAssembly).
-const MODEL_GPU = 'onnx-community/whisper-base';
-const MODEL_WASM = 'Xenova/whisper-base';
+const MODELS = {
+  fast: { gpu: 'onnx-community/whisper-base', wasm: 'Xenova/whisper-base' },
+  precise: { gpu: 'onnx-community/whisper-small', wasm: 'Xenova/whisper-small' },
+};
+let quality = 'fast';
 let asr = null;
 let loading = null;
 
-function load() {
+function load(q) {
+  if (q && MODELS[q] && q !== quality && !loading) { quality = q; asr = null; }
   if (asr) return Promise.resolve(asr);
   if (loading) return loading;
   const progress_callback = (p) => {
@@ -21,10 +26,10 @@ function load() {
   loading = (async () => {
     // WebGPU (carte graphique) si disponible, sinon WebAssembly (processeur).
     if (self.navigator && self.navigator.gpu) {
-      try { asr = await make(MODEL_GPU, 'webgpu', { encoder_model: 'fp32', decoder_model_merged: 'q4' }); }
+      try { asr = await make(MODELS[quality].gpu, 'webgpu', { encoder_model: 'fp32', decoder_model_merged: 'q4' }); }
       catch (e) { asr = null; }
     }
-    if (!asr) asr = await make(MODEL_WASM, 'wasm', 'q8');
+    if (!asr) asr = await make(MODELS[quality].wasm, 'wasm', 'q8');
     // Échauffement : la toute première transcription est lente (compilation) ; on la fait tout de suite
     // sur une demi-seconde de silence, pour que votre première vraie phrase soit rapide.
     try { await asr(new Float32Array(8000), { language: 'french', task: 'transcribe' }); } catch (e) { /* ignore */ }
@@ -38,7 +43,7 @@ function load() {
 self.onmessage = async (e) => {
   const m = e.data || {};
   try {
-    if (m.type === 'load') { await load(); return; }
+    if (m.type === 'load') { await load(m.quality); return; }
     if (m.type === 'transcribe') {
       const model = await load();
       const out = await model(m.audio, { language: 'french', task: 'transcribe', chunk_length_s: 30 });

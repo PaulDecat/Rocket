@@ -214,6 +214,23 @@ test('v4 : plusieurs questions dans une phrase, matinale sur demande', async () 
   assert.notStrictEqual(assistant.detectIntent('qui est le premier ministre').kind, 'politics');
 });
 
+test('v6 : variantes de transcription comprises', () => {
+  const C = require('../public/command');
+  const cases = {
+    'Rocket, quel temps fait-il s il te plaît.': 'quel temps fait-il',
+    'okay rock et mets du jazz sil te plait': 'mets du jazz',
+    'Ok Rocket ouvre la cuisine s il vous plaît': 'ouvre la cuisine',
+    'Ok Rocket raconte une blague stp': 'raconte une blague',
+    'Hey Rocket, lance la matinale, s-il-te-plaît !': 'lance la matinale',
+    'Ok Roquet donne-moi la météo s te plaît': 'donne-moi la météo',
+    'ok Rocket combien font 12 fois 7 si te plaît…': 'combien font 12 fois 7',
+    'au cas rocket quelle heure est-il s il te plait': 'quelle heure est-il',
+  };
+  for (const [q, want] of Object.entries(cases)) assert.strictEqual(C.parse(q).question, want, q);
+  assert.strictEqual(C.parse("comment va le CAC, s'il te plaît").complete, false);
+  assert.strictEqual(C.parse("une recette avec de la roquette s'il te plaît").complete, false);
+});
+
 test('graphiques Claude : jamais sans source', () => {
   assert.strictEqual(research.pointsVisual({ series: [{ name: 'x', points: [{ x: '2024', y: 1 }, { x: '2025', y: 2 }] }] }), null);
   const v = research.pointsVisual({ title: 'CDS', source: 'Test', series: [{ name: 'CDS', points: [{ x: '2024-01-01', y: 30 }, { x: '2025-01-01', y: 35 }] }] });

@@ -15,6 +15,13 @@
   const BROKEN_WEB = /\bOPR\/|\bOPX\/|\bOPT\/|Opera|YaBrowser|Vivaldi/.test(UA) || !!navigator.brave;
   const BUFFER_MS = 12000; // délai max entre « Ok Rocket » et « s'il te plaît »
   const KEY = 'rocket.stt';
+  const QKEY = 'rocket.stt.quality';
+  // Moteur local : « précis » (Whisper small) si la carte graphique est utilisable (WebGPU), sinon « rapide ».
+  function quality() {
+    const q = read(QKEY) || 'auto';
+    if (q === 'fast' || q === 'precise') return q;
+    return navigator.gpu ? 'precise' : 'fast';
+  }
 
   const read = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const write = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) { /* ignore */ } };
@@ -120,7 +127,7 @@
     LocalSTT.load((p) => {
       const pct = Math.round((p.loaded / p.total) * 100);
       emit('status', `Téléchargement du moteur vocal (une seule fois) : ${pct} %`);
-    }).then(() => { if (active()) emit('status', 'Moteur vocal prêt. Parlez, Monsieur.'); })
+    }, quality()).then(() => { if (active()) emit('status', 'Moteur vocal prêt. Parlez, Monsieur.'); })
       .catch((e) => { localPrepared = false; emit('error', "Le moteur vocal local n'a pas pu se charger (" + e.message + '). Vérifiez la connexion Internet, ou ouvrez Rocket dans Chrome ou Edge.'); });
   }
 
@@ -259,13 +266,21 @@
 
   function init(handlers) { st.handlers = handlers || {}; }
 
+  function setQuality(q) {
+    write(QKEY, ['auto', 'fast', 'precise'].includes(q) ? q : 'auto');
+    localPrepared = false;
+    if (engine() === 'local') prepareLocal();
+  }
+
   // Au démarrage de Rocket : le moteur local (Opera, Brave, Firefox…) est préparé à l'avance.
   function warm() { if (engine() === 'local') prepareLocal(); }
 
   window.Listen = {
     // Le micro fonctionne si on peut l'ouvrir : le moteur local prend le relais du navigateur.
     supported: !!(window.Mic && Mic.supported) || !!SR,
-    init, once, cancel, setLatched, setPref, beep, warm,
+    init, once, cancel, setLatched, setPref, setQuality, beep, warm,
+    get quality() { return read(QKEY) || 'auto'; },
+    get effectiveQuality() { return quality(); },
     get latched() { return st.latched; },
     get capturing() { return !!st.capture; },
     get engine() { return engine(); },

@@ -126,6 +126,7 @@
 
       <form id="askForm" class="ask-bar" autocomplete="off">
         <input id="askInput" type="text" placeholder="Ok Rocket, comment va le CAC 40, s'il te plaît" aria-label="Demande pour Rocket" maxlength="500">
+        <button id="dictateBtn" class="icon-btn" type="button" title="Dictée Windows (touches Windows + H) : reconnaissance vocale de Microsoft, très précise" aria-label="Dictée Windows">⊞H</button>
         <button class="icon-btn send-btn" type="submit" aria-label="Envoyer">➤</button>
       </form>
 
@@ -206,7 +207,26 @@
           <option value="local">Moteur local (Opera, Opera GX, Brave, Firefox…)</option>
         </select>
       </label>
+      <label class="set-row">Précision du moteur local
+        <select id="sttQuality">
+          <option value="auto">Automatique (précis si la carte graphique le permet)</option>
+          <option value="fast">Rapide (~80 Mo)</option>
+          <option value="precise">Précis (~250 Mo, comprend bien mieux)</option>
+        </select>
+      </label>
       <p id="sttInfo" class="set-note">—</p>
+      <details class="set-iphone" id="iphoneBox">
+        <summary>📱 iPhone : « Dis Siri, Rocket »</summary>
+        <p class="set-note">Siri (la reconnaissance d'Apple, excellente) écoute votre question et l'envoie à Rocket, qui répond sur l'iPhone. L'iPhone doit être sur le même Wi-Fi que cet ordinateur, et Rocket allumé.</p>
+        <ol class="set-steps">
+          <li>Sur l'iPhone, ouvrez l'app <b>Raccourcis</b> → <b>+</b> → nommez le raccourci <b>Rocket</b>.</li>
+          <li>Ajoutez l'action <b>Dicter le texte</b> (langue : Français ; arrêter l'écoute : après une pause).</li>
+          <li>Ajoutez <b>Obtenir le contenu de l'URL</b> : adresse <code id="siriUrl">—</code>, méthode <b>POST</b>, en-tête <b>X-Rocket-Key</b> = <code id="siriKey">—</code>, corps <b>JSON</b> avec le champ <b>question</b> = <i>Texte dicté</i>.</li>
+          <li>Ajoutez <b>Énoncer le texte</b> (Contenu de l'URL).</li>
+          <li>Dites : « <b>Dis Siri, Rocket</b> », puis votre question.</li>
+        </ol>
+        <p class="set-note">Les ajouts au planning et au coach faits depuis l'iPhone apparaissent ici dans les secondes qui suivent. Gardez la clé pour vous.</p>
+      </details>
       <p class="set-row"><span>Réponses :</span> <b id="aiMode">—</b></p>
       <div class="set-actions"><button class="btn-primary" value="close">Fermer</button></div>
     </form>

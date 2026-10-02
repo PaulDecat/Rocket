@@ -762,7 +762,9 @@
   function submit(raw, fromVoice) {
     const p = Command.parse(raw);
     if (!p.complete) {
-      setStatus(p.wake ? "Terminez votre demande par « s'il te plaît », Monsieur." : Command.HINT);
+      const heard = String(raw || '').trim();
+      const said = heard ? ` J'ai entendu : « ${heard.slice(0, 120)} ».` : '';
+      setStatus((p.wake ? "Terminez votre demande par « s'il te plaît », Monsieur." : Command.HINT) + said);
       const r = document.querySelector('.sub-rule');
       r.classList.remove('flash'); void r.offsetWidth; r.classList.add('flash');
       return false;
@@ -957,7 +959,7 @@
     engine: () => setStatus("Votre navigateur ne transmet pas la voix : Rocket passe à son moteur vocal local."),
     wake: () => { pauseForListening(); setCore('listening'); setStatus('Je vous écoute, Monsieur…'); },
     command: (question, raw) => { submit(raw, false); },
-    incomplete: () => { setStatus("Terminez votre demande par « s'il te plaît », Monsieur."); resumeAfterListening(); if (S.coreState === 'listening' && !Listen.latched) setCore('idle'); },
+    incomplete: (t) => { setStatus(`Terminez votre demande par « s'il te plaît », Monsieur.${t ? ` J'ai entendu : « ${String(t).slice(0, 120)} ».` : ''}`); resumeAfterListening(); if (S.coreState === 'listening' && !Listen.latched) setCore('idle'); },
     interim: (t) => { if (t && !S.asking) setStatus(t); },
     state: updateTalkUI,
     error: (msg) => { S.micErrorAt = Date.now(); setStatus(msg); setCore('idle'); },
@@ -981,6 +983,29 @@
     if (wasPlaying && S.playing && S.paused) run(S.idx);
   }
 
+  // ---------- iPhone : partage du planning et actions venues de Siri ----------
+  let syncTimer = 0;
+  function syncContext() {
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => {
+      fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planning: Views.Planning.list(), coach: Views.Coach.summary(), city: getCity() }) }).catch(() => {});
+    }, 300);
+  }
+  async function pollPending() {
+    try {
+      const r = await fetch('/api/pending');
+      if (!r.ok) return;
+      const { actions } = await r.json();
+      for (const a of actions || []) {
+        if (a.action === 'planning-add' && a.event) Views.Planning.add(a.event);
+        if (a.action === 'planning-remove' && a.removeId) Views.Planning.remove(a.removeId);
+        if (a.action === 'coach-log' && a.habit) Views.Coach.log(a.habit, Number(a.delta) || 1);
+        if (!S.asking && !S.playing) setStatus(`📱 Depuis l'iPhone : « ${a.question} » — c'est fait.`);
+      }
+      if ((actions || []).length && S.visual && S.visual.type === 'page') $('overlay').innerHTML = Views.render(S.visual.view);
+    } catch (e) { /* serveur indisponible */ }
+  }
+
   function getCity() { try { return localStorage.getItem('rocket.city') || ''; } catch (e) { return ''; } }
   function getDeezerUser() { try { return localStorage.getItem('rocket.deezer') || ''; } catch (e) { return ''; } }
 
@@ -1000,6 +1025,12 @@
     const serverVoices = Voice.mode === 'edge';
     $('voiceSel').disabled = !serverVoices;
     $('sttSel').value = Listen.pref;
+    $('sttQuality').value = Listen.quality;
+    fetch('/api/siri-setup').then((r) => r.json()).then((j) => {
+      if (!j.key) return;
+      $('siriKey').textContent = j.key;
+      $('siriUrl').textContent = (j.urls && j.urls[0]) || 'http://(adresse de l\'ordinateur):3000/api/siri';
+    }).catch(() => { $('iphoneBox').hidden = true; });
     $('sttInfo').textContent = ENGINE_TXT[Listen.engine] + (Listen.webAvailable ? '' : ' La reconnaissance de ce navigateur ne fonctionne pas : le moteur local est utilisé.');
     $('aiMode').textContent = { 'claude-code': 'Claude via Claude Code (abonnement)', api: "Claude via l'API Anthropic", local: 'réponses locales (sans Claude)' }[cfg.ai] || cfg.ai;
   }
@@ -1035,6 +1066,8 @@
     chart.resize();
     drawSparklines();
     Listen.warm();
+    syncContext();
+    setInterval(pollPending, 5000);
     // La matinale ne démarre plus toute seule : Rocket attend vos demandes.
     const hint = "Pour écouter la matinale : « Ok Rocket, lance la matinale, s'il te plaît », ou le bouton ▶.";
     await sayText('Bonjour Monsieur, Rocket est à votre service.');
@@ -1079,7 +1112,7 @@
     Views.attach($('overlay'), {
       rerender: () => { if (S.visual && S.visual.type === 'page') $('overlay').innerHTML = Views.render(S.visual.view); },
       speak: (text) => sayText(text),
-      changed: (what) => { if (what === 'planning') { updatePlanningBadge(); if (!S.playing) { S.script = withPlanning(S.briefing.script); buildChapters(); renderChapters(); updateProgress(); } } },
+      changed: (what) => { syncContext(); if (what === 'planning') { updatePlanningBadge(); if (!S.playing) { S.script = withPlanning(S.briefing.script); buildChapters(); renderChapters(); updateProgress(); } } },
     });
     $('detailStats').addEventListener('click', (e) => {
       const b = e.target.closest('#analyseBtn');
@@ -1114,8 +1147,20 @@
     $('rate').addEventListener('input', (e) => { Voice.set('rate', +e.target.value); $('rateOut').textContent = fmt(+e.target.value, 2); });
     $('musicTarget').addEventListener('change', (e) => Music.setTarget(e.target.value));
     $('sttSel').addEventListener('change', (e) => { Listen.setPref(e.target.value); fillSettings(); });
+    $('sttQuality').addEventListener('change', (e) => { Listen.setQuality(e.target.value); fillSettings(); });
+    // Dictée Windows : on ne peut pas l'ouvrir à votre place, mais le texte dicté est envoyé tout seul.
+    $('dictateBtn').addEventListener('click', () => {
+      $('askInput').focus();
+      setStatus("Appuyez maintenant sur les touches Windows + H et parlez : « Ok Rocket, …, s'il te plaît ». La demande part toute seule.");
+    });
+    let autoTimer = 0;
+    $('askInput').addEventListener('input', () => {
+      clearTimeout(autoTimer);
+      const v = $('askInput').value;
+      if (Command.parse(v).complete) autoTimer = setTimeout(() => { if ($('askInput').value === v) submit(v); }, 1200);
+    });
     $('deezerCheck').addEventListener('click', checkDeezer);
-    $('citySel').addEventListener('change', (e) => { try { localStorage.setItem('rocket.city', e.target.value.trim().slice(0, 60)); } catch (err) { /* ignore */ } });
+    $('citySel').addEventListener('change', (e) => { try { localStorage.setItem('rocket.city', e.target.value.trim().slice(0, 60)); } catch (err) { /* ignore */ } syncContext(); });
     $('deezerUser').addEventListener('change', () => { try { localStorage.setItem('rocket.deezer', $('deezerUser').value.trim()); } catch (e) { /* ignore */ } });
     $('settings').addEventListener('click', (e) => {
       const b = e.target.closest('[data-test]');

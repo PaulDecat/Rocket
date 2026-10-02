@@ -1,4 +1,4 @@
-# 🚀 Rocket v5 — votre assistant personnel
+# 🚀 Rocket v6 — votre assistant personnel
 
 Rocket répond à **toutes vos questions**, à la voix. Et quand vous le lui demandez, il vous lit un point complet : Bourses, taux et devises, matières premières, radar
 investissement, actualité économique et politique, votre agenda du jour, une idée de recette et un conseil
@@ -10,6 +10,7 @@ Rocket a aussi des onglets **Cuisine**, **Ciné**, **Coach hygiène de vie** et 
 > Anciennes versions :
 > v1 (Nova et Atlas) <https://github.com/PaulDecat/Rocket/archive/2ccb6165a41820e973bcd36aa1c50007151c37de.zip> ·
 > v2 <https://github.com/PaulDecat/Rocket/archive/640944de63e88e35ca1c1138c063e504ddbdcd4b.zip> ·
+> v5 <https://github.com/PaulDecat/Rocket/archive/3bf49c6d9ff91fc43f944da474c8e32c2e0efe45.zip> ·
 > v4 <https://github.com/PaulDecat/Rocket/archive/3918e77b2443a52b758a2cb2b61d3c6ab35eed48.zip> ·
 > v3 <https://github.com/PaulDecat/Rocket/archive/ef08f62621873e912bee1cfe21348f41bee582d3.zip>
 
@@ -53,6 +54,37 @@ La règle vaut aussi pour la barre de texte.
 |---|---|
 | 🎙 **PARLER** | Appuyez une fois : il devient **rouge**, Rocket écoute votre demande. Il revient à son état initial après la demande. Réappuyez pour annuler. |
 | 🔓 **MAINTENIR** | Appuyez : il devient **orange** 🔒 et garde **PARLER enfoncé** : Rocket écoute en continu. Réappuyez sur MAINTENIR : PARLER retrouve son état initial. |
+
+### Pour être bien compris (nouveau dans la v6)
+
+- **Le meilleur micro sur l'ordinateur : la dictée Windows.** Cliquez dans la barre de texte (ou sur le bouton
+  **⊞H**), appuyez sur les touches **Windows + H** et parlez : « Ok Rocket, …, s'il te plaît ». C'est la
+  reconnaissance de Microsoft, très précise ; la demande part toute seule dès que la phrase est complète.
+- Rocket tolère les déformations courantes : « Rocket » seul en début de phrase (le « Ok » est souvent avalé),
+  « roquette », « rock et », « okay », « s'il vous plaît », « stp », « sil te plait »…
+- Quand une phrase n'est pas exécutée, Rocket affiche **ce qu'il a entendu**, pour que vous voyiez le problème.
+- Claude sait que la phrase vient de la reconnaissance vocale : il devine le sens même avec des fautes.
+- Opera GX, Brave, Firefox : le moteur local passe en mode **« précis »** (Whisper small, ~250 Mo, bien meilleur
+  en français) quand la carte graphique le permet. Réglage dans ⚙ → « Précision du moteur local ».
+
+### 📱 « Dis Siri, Rocket » sur l'iPhone (nouveau dans la v6)
+
+Siri ne peut pas être copié ni renommé (il appartient à Apple et ne fonctionne que dans l'iPhone). Mais un
+**raccourci iPhone nommé « Rocket »** fait presque pareil : Siri (la reconnaissance d'Apple) écoute votre
+question, l'envoie à Rocket, et l'iPhone lit la réponse. Il faut que l'iPhone soit sur le **même Wi-Fi** que
+l'ordinateur, et Rocket allumé.
+
+1. Sur l'ordinateur : ⚙ → **iPhone : « Dis Siri, Rocket »**. Notez l'**adresse** et la **clé** affichées.
+2. Sur l'iPhone : app **Raccourcis** → **+** → nommez le raccourci **Rocket**.
+3. Ajoutez **Dicter le texte** (langue : Français).
+4. Ajoutez **Obtenir le contenu de l'URL** : l'adresse notée, méthode **POST**, en-tête **X-Rocket-Key** = la
+   clé, corps **JSON** avec le champ **question** = *Texte dicté*.
+5. Ajoutez **Énoncer le texte** (*Contenu de l'URL*).
+6. Dites « **Dis Siri, Rocket** », puis votre question. Pas besoin de « Ok Rocket » ni de « s'il te plaît ».
+
+Les ajouts au planning et au coach faits depuis l'iPhone apparaissent sur l'ordinateur quelques secondes plus
+tard. Au premier lancement, Windows peut demander d'autoriser Node.js sur le réseau : acceptez (réseau privé).
+Si l'adresse de l'ordinateur change (box redémarrée), mettez-la à jour dans le raccourci.
 
 ### Le micro (nouveau dans la v3)
 

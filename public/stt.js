@@ -123,7 +123,7 @@
   }
 
   // ---------- Moteur local (Whisper) ----------
-  const stt = { worker: null, ready: false, loading: null, seq: 0, pending: new Map(), onProgress: null };
+  const stt = { worker: null, ready: false, loading: null, quality: null, seq: 0, pending: new Map(), onProgress: null };
 
   function worker() {
     if (stt.worker) return stt.worker;
@@ -150,8 +150,10 @@
   }
 
   // Prépare le moteur (téléchargement du modèle la première fois).
-  function load(onProgress) {
+  function load(onProgress, quality) {
     if (window.__STT_FAKE) { stt.ready = true; return Promise.resolve(); }
+    quality = quality || 'fast';
+    if (stt.quality !== quality) { stt.ready = false; stt.loading = null; stt.quality = quality; } // changement de modèle
     if (stt.ready) return Promise.resolve();
     stt.onProgress = onProgress || null;
     if (stt.loading) return stt.loading.promise;
@@ -159,7 +161,7 @@
     const promise = new Promise((a, b) => { resolve = a; reject = b; });
     stt.loading = { promise, resolve, reject };
     promise.catch(() => { stt.loading = null; });
-    worker().postMessage({ type: 'load' });
+    worker().postMessage({ type: 'load', quality: quality || 'fast' });
     return promise;
   }
 

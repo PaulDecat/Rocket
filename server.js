@@ -78,6 +78,30 @@ async function getBriefing(refresh) {
 // Sur un hébergeur (Render), il n'y a pas d'« ordinateur » à protéger : les questions sont ouvertes.
 const HOSTED = !!process.env.RENDER || process.env.ALLOW_REMOTE_ASK === '1';
 
+// ---------- iPhone / Siri ----------
+// Une clé secrète, créée au premier lancement, autorise le raccourci « Rocket » de l'iPhone
+// (« Dis Siri, Rocket ») à interroger Rocket depuis le Wi-Fi de la maison.
+const KEY_FILE = path.join(__dirname, '.rocket-key');
+function siriKey() {
+  try { const k = fs.readFileSync(KEY_FILE, 'utf8').trim(); if (/^[A-Za-z0-9]{12,64}$/.test(k)) return k; } catch (e) { /* première fois */ }
+  const k = require('crypto').randomBytes(12).toString('hex');
+  try { fs.writeFileSync(KEY_FILE, k); } catch (e) { /* lecture seule : clé en mémoire */ }
+  return k;
+}
+const SIRI_KEY = siriKey();
+// Dernier état connu du planning et du coach (envoyé par le navigateur de l'ordinateur),
+// pour que Siri puisse répondre « qu'est-ce que j'ai demain ? ».
+let lastContext = {};
+// Actions demandées depuis l'iPhone (ajout au planning…), appliquées par le navigateur de l'ordinateur.
+let pendingActions = [];
+const PENDING_KINDS = ['planning-add', 'planning-remove', 'coach-log'];
+
+function keyOk(req, url, body) {
+  const k = req.headers['x-rocket-key'] || url.searchParams.get('key') || (body && body.key) || '';
+  const a = Buffer.from(String(k)), b = Buffer.from(SIRI_KEY);
+  return a.length === b.length && require('crypto').timingSafeEqual(a, b);
+}
+
 function isLocal(req) {
   const a = req.socket.remoteAddress || '';
   return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
@@ -193,6 +217,48 @@ async function handle(req, res) {
     const id = String(body.id == null ? '' : body.id);
     if (!music.KINDS.includes(kind) || !/^\d{1,15}$/.test(id)) return sendJson(res, 400, { error: 'Paramètres invalides' });
     return sendJson(res, 200, await music.openInApp(kind, id));
+  }
+
+  // Raccourci iPhone « Rocket » : question → réponse en texte brut (lue par l'iPhone).
+  if (p === '/api/siri' && (req.method === 'POST' || req.method === 'GET')) {
+    const body = req.method === 'POST' ? await readBody(req) : {};
+    if (!isLocal(req) && !keyOk(req, url, body)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end('Clé Rocket incorrecte. Recopiez la clé affichée dans les réglages de Rocket.');
+    }
+    let question = String(body.question || body.q || url.searchParams.get('q') || '').slice(0, 1000).trim();
+    // Siri a déjà été appelé par son nom : « Ok Rocket » et « s'il te plaît » sont facultatifs ici.
+    question = question.replace(/^\s*(ok|okay|dis|hey)?\s*,?\s*(rocket|roquette)\s*[,.!]*\s*/i, '').replace(/[\s,]*s['’ ]?\s?il (te|vous) pla[iî]t[\s.!?]*$/i, '').trim();
+    let answer;
+    if (!question) answer = 'Oui Monsieur ? Posez-moi votre question.';
+    else {
+      const briefing = await getBriefing(false);
+      const r = await assistant.ask({ question, context: lastContext }, briefing, () => {});
+      answer = String(r.answer || '').trim() || "Désolé Monsieur, je n'ai pas compris.";
+      for (const a of r.actions || [r]) if (a && PENDING_KINDS.includes(a.action)) pendingActions.push({ ...a, at: Date.now(), question });
+      pendingActions = pendingActions.slice(-50);
+    }
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(answer);
+  }
+
+  if (p === '/api/sync' && req.method === 'POST') {
+    if (!isLocal(req)) return sendJson(res, 403, { error: LOCAL_ONLY_MSG });
+    const body = await readBody(req, 256 * 1024);
+    lastContext = { planning: Array.isArray(body.planning) ? body.planning.slice(0, 200) : [], coach: body.coach && typeof body.coach === 'object' ? body.coach : {}, city: typeof body.city === 'string' ? body.city.slice(0, 60) : '' };
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (p === '/api/pending' && req.method === 'GET') {
+    if (!isLocal(req)) return sendJson(res, 403, { error: LOCAL_ONLY_MSG });
+    const list = pendingActions;
+    pendingActions = [];
+    return sendJson(res, 200, { actions: list });
+  }
+
+  if (p === '/api/siri-setup' && req.method === 'GET') {
+    if (!isLocal(req)) return sendJson(res, 403, { error: LOCAL_ONLY_MSG });
+    return sendJson(res, 200, { key: SIRI_KEY, urls: lanAddresses().map((a) => `http://${a}:${PORT}/api/siri`) });
   }
 
   if (p.startsWith('/api/')) return sendJson(res, 404, { error: 'Route inconnue' });

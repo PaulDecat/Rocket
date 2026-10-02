@@ -481,6 +481,26 @@ function lanIp() {
     assert.strictEqual(r2.status, 403);
   });
 
+  await test('iPhone / Siri : réponse avec la clé, refus sans clé, planning transmis au navigateur', async () => {
+    const ip = lanIp();
+    const key = require('fs').readFileSync(path.join(__dirname, '..', '.rocket-key'), 'utf8').trim();
+    const setup = await (await fetch(`${BASE}/api/siri-setup`)).json();
+    assert.strictEqual(setup.key, key);
+    if (!ip) { console.log('    (pas d’interface réseau : partie Wi-Fi ignorée)'); return; }
+    const url = `http://${ip}:${PORT}/api/siri`;
+    assert.strictEqual((await fetch(url, { method: 'POST', body: '{"question":"quelle heure est-il"}' })).status, 403);
+    assert.strictEqual((await fetch(`http://${ip}:${PORT}/api/siri-setup`)).status, 403);
+    const ask = (question) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Rocket-Key': key }, body: JSON.stringify({ question }) });
+    const r = await ask('Ok Rocket, combien font 12 fois 7, s’il te plaît');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(await r.text(), 'Cela fait 84, Monsieur.');
+    const add = await (await ask('ajoute dentiste demain à 15h')).text();
+    assert.ok(/C'est noté, Monsieur : Dentiste, demain à 15 heures/.test(add), add);
+    const pending = await (await fetch(`${BASE}/api/pending`)).json();
+    assert.strictEqual(pending.actions[0].event.title, 'Dentiste');
+    assert.strictEqual((await fetch(`http://${ip}:${PORT}/api/pending`)).status, 403);
+  });
+
   await test('sécurité : validation des entrées et chemins', async () => {
     assert.strictEqual((await fetch(`${BASE}/api/music/open`, { method: 'POST', body: '{"kind":"x","id":"1;rm"}' })).status, 400);
     assert.strictEqual((await fetch(`${BASE}/api/intraday?symbol=../../etc`)).status, 400);
