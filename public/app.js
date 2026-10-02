@@ -796,7 +796,7 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal,
         body: JSON.stringify({
           question, history: S.history.slice(-6), deezerUser: getDeezerUser(),
-          context: { planning: Views.Planning.list(), coach: Views.Coach.summary(), city: getCity() },
+          context: { planning: Views.Planning.list(), coach: Views.Coach.summary(), city: getCity(), musicProvider: Music.target === 'youtube' ? 'youtube' : 'deezer' },
         }),
       });
       if (!r.ok) {
@@ -833,6 +833,7 @@
     if (talker && !(result && result.streamed)) { talker.cancel(); talker = null; }
     if (!result) result = { answer: SORRY };
     let answer = result.answer || SORRY;
+    $('subSpeaker').textContent = result.brain === 'ollama' ? 'ROCKET · IA LOCALE' : 'ROCKET';
     if (result.music) {
       const extra = Music.handle(result.music);
       if (extra) answer += ' ' + extra;
@@ -1006,6 +1007,15 @@
     } catch (e) { /* serveur indisponible */ }
   }
 
+  // Quel « cerveau » répond : Claude, l'IA locale de secours, ou les connaissances de Rocket.
+  function brainText(cfg) {
+    const b = cfg.brain || {};
+    const main = { 'claude-code': 'Claude via Claude Code (abonnement)', api: "Claude via l'API Anthropic", fake: 'Claude (test)', local: 'sans Claude' }[cfg.ai] || cfg.ai;
+    const backup = b.ollama ? `IA locale « ${b.ollama} »` : "pas d'IA locale (voir « Installer l'IA locale.bat »)";
+    if (b.claude && !b.claudeUsable) return `${b.claudeDownReason || 'Claude indisponible'} : réponses par ${b.ollama ? 'l\'IA locale' : 'Rocket seul'}. Secours : ${backup}.`;
+    return `${main}. Secours : ${backup}.`;
+  }
+
   function getCity() { try { return localStorage.getItem('rocket.city') || ''; } catch (e) { return ''; } }
   function getDeezerUser() { try { return localStorage.getItem('rocket.deezer') || ''; } catch (e) { return ''; } }
 
@@ -1032,7 +1042,8 @@
       $('siriUrl').textContent = (j.urls && j.urls[0]) || 'http://(adresse de l\'ordinateur):3000/api/siri';
     }).catch(() => { $('iphoneBox').hidden = true; });
     $('sttInfo').textContent = ENGINE_TXT[Listen.engine] + (Listen.webAvailable ? '' : ' La reconnaissance de ce navigateur ne fonctionne pas : le moteur local est utilisé.');
-    $('aiMode').textContent = { 'claude-code': 'Claude via Claude Code (abonnement)', api: "Claude via l'API Anthropic", local: 'réponses locales (sans Claude)' }[cfg.ai] || cfg.ai;
+    $('aiMode').textContent = brainText(cfg);
+    fetch('/api/config').then((r) => r.json()).then((c) => { S.config.brain = c.brain; $('aiMode').textContent = brainText(c); }).catch(() => {});
   }
 
   async function checkDeezer() {
@@ -1071,8 +1082,9 @@
     // La matinale ne démarre plus toute seule : Rocket attend vos demandes.
     const hint = "Pour écouter la matinale : « Ok Rocket, lance la matinale, s'il te plaît », ou le bouton ▶.";
     await sayText('Bonjour Monsieur, Rocket est à votre service.');
-    setStatus(S.config && S.config.ai === 'local'
-      ? `${hint} Pour que je réponde à toutes vos questions, connectez Claude (voir le mode d'emploi).`
+    const b = (S.config && S.config.brain) || {};
+    setStatus(!b.claude && !b.ollama
+      ? `${hint} Pour que je réponde à toutes vos questions, connectez Claude ou installez l'IA locale gratuite (voir le mode d'emploi).`
       : hint);
   }
 

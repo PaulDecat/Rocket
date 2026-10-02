@@ -4,7 +4,8 @@
   const KEY = 'rocket.music';
   const $ = (id) => document.getElementById(id);
   const st = { target: 'app', current: null, playing: false };
-  try { st.target = localStorage.getItem(KEY) === 'widget' ? 'widget' : 'app'; } catch (e) { /* ignore */ }
+  // youtube (par défaut) : Rocket pilote une fenêtre YouTube ; app / widget : Deezer.
+  try { const t = localStorage.getItem(KEY); st.target = t === 'widget' || t === 'app' ? t : 'youtube'; } catch (e) { st.target = 'youtube'; }
 
   function webUrl(item) { return `https://www.deezer.com/fr/${item.kind}/${item.id}`; }
   function widgetUrl(item) {
@@ -73,7 +74,7 @@
   }
 
   function setTarget(t) {
-    st.target = t === 'widget' ? 'widget' : 'app';
+    st.target = t === 'widget' || t === 'app' ? t : 'youtube';
     try { localStorage.setItem(KEY, st.target); } catch (e) { /* ignore */ }
   }
 

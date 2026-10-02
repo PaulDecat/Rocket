@@ -1,6 +1,8 @@
 'use strict';
 // Tests unitaires (sans dépendance) : node tests/unit.js
 const assert = require('assert');
+// IA locale de test (fausse) : uniquement pour le test qui la démarre.
+process.env.OLLAMA_HOST = 'http://127.0.0.1:3198';
 const sources = require('../lib/sources');
 const signals = require('../lib/signals');
 const script = require('../lib/script');
@@ -229,6 +231,49 @@ test('v6 : variantes de transcription comprises', () => {
   for (const [q, want] of Object.entries(cases)) assert.strictEqual(C.parse(q).question, want, q);
   assert.strictEqual(C.parse("comment va le CAC, s'il te plaît").complete, false);
   assert.strictEqual(C.parse("une recette avec de la roquette s'il te plaît").complete, false);
+});
+
+test('v7 : vidéos et musique sur YouTube', () => {
+  const Y = require('../lib/youtube');
+  const M = require('../lib/music');
+  assert.deepStrictEqual(Y.parseVideo('mets la vidéo de chats qui dansent'), { action: 'play', query: 'chats qui dansent' });
+  assert.deepStrictEqual(Y.parseVideo('lance la bande-annonce de Dune'), { action: 'play', query: 'bande annonce dune' });
+  assert.deepStrictEqual(Y.parseVideo('mets Bella de Gims sur YouTube'), { action: 'play', query: 'bella de gims' });
+  assert.deepStrictEqual(Y.parseVideo('ouvre youtube'), { action: 'open' });
+  assert.strictEqual(Y.parseVideo('mets la vidéo en pause').action, 'pause');
+  assert.strictEqual(Y.parseVideo('monte le son').action, 'louder');
+  assert.strictEqual(Y.parseVideo('comment va le CAC 40'), null);
+  assert.strictEqual(Y.musicToQuery(M.parseMusic('mets Gims')), 'gims musique');
+  assert.strictEqual(Y.musicToQuery(M.parseMusic('mets du jazz')), 'musique jazz playlist');
+  assert.strictEqual(Y.musicToQuery(M.parseMusic('joue la chanson Bella de Gims')), 'bella gims');
+});
+
+test('v7 : sans Claude, l’IA locale répond (en flux), et Claude déconnecté est mis de côté', async () => {
+  const http = require('http');
+  const srv = http.createServer((req, res) => {
+    if (req.url === '/api/tags') { res.end(JSON.stringify({ models: [{ name: 'qwen2.5:7b' }] })); return; }
+    if (req.url === '/api/chat') {
+      res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+      res.write(JSON.stringify({ message: { content: 'Canberra est la capitale ' } }) + '\n');
+      setTimeout(() => { res.end(JSON.stringify({ message: { content: "de l'Australie, Monsieur." }, done: true }) + '\n'); }, 50);
+      return;
+    }
+    res.writeHead(404); res.end();
+  });
+  await new Promise((r) => srv.listen(3198, '127.0.0.1', r));
+  try {
+    require('../lib/ollama').reset();
+    const deltas = [];
+    const r = await assistant.ask({ question: "quelle est la capitale de l'Australie", context: {} }, briefing, (e) => { if (e.type === 'delta') deltas.push(e.text); });
+    assert.strictEqual(r.answer, "Canberra est la capitale de l'Australie, Monsieur.");
+    assert.strictEqual(r.brain, 'ollama');
+    assert.ok(r.streamed && deltas.join('').includes('Canberra'));
+    assistant.markClaudeDown(new Error('Invalid API key · Please run /login'));
+    assert.strictEqual(assistant.claudeUsable(), false);
+  } finally {
+    srv.close();
+    require('../lib/ollama').reset();
+  }
 });
 
 test('graphiques Claude : jamais sans source', () => {

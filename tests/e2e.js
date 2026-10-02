@@ -511,6 +511,38 @@ function lanIp() {
   });
 
   if (errors.length) { failed++; console.error('  ✗ erreurs JavaScript dans la page :\n    ' + errors.join('\n    ')); }
+  // ---------- v7 : YouTube piloté par Rocket (faux YouTube) ----------
+  const YT_PORT = PORT + 2, YT_ROCKET = PORT + 3;
+  const fakeYt = await require('./fake-youtube').start(YT_PORT);
+  const ytServer = await startServer(YT_ROCKET, { ROCKET_YT_BASE: `http://127.0.0.1:${YT_PORT}`, ROCKET_YT_BROWSER: process.env.ROCKET_YT_BROWSER || chromium.executablePath(), ROCKET_YT_HEADLESS: '1' });
+  try {
+    await test('YouTube : ouvre la page, accepte les conditions, lance la vidéo, puis réutilise le même onglet', async () => {
+      const ask = async (q) => {
+        const r = await fetch(`http://localhost:${YT_ROCKET}/api/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, context: { musicProvider: 'youtube' } }) });
+        return JSON.parse((await r.text()).trim().split('\n').pop());
+      };
+      const r1 = await ask('mets la vidéo de chats qui dansent sur YouTube');
+      assert.strictEqual(r1.answer, 'Je lance « Vidéo : chats qui dansent » sur YouTube, Monsieur.');
+      let st = await (await fetch(`http://localhost:${YT_ROCKET}/api/youtube`)).json();
+      assert.ok(st.open && st.playing, JSON.stringify(st));
+      const r2 = await ask('mets du jazz');
+      assert.ok(/Je lance « Vidéo : musique jazz playlist »/.test(r2.answer), r2.answer);
+      st = await (await fetch(`http://localhost:${YT_ROCKET}/api/youtube`)).json();
+      assert.ok(/musique%20jazz/.test(st.url) && st.playing, JSON.stringify(st));
+      // Conditions acceptées une seule fois ; une seule fenêtre/onglet (même page réutilisée).
+      const consentPages = fakeYt.log.filter((l) => /^\/results/.test(l)).length;
+      assert.strictEqual(consentPages, 3, fakeYt.log.join(' | ')); // 1re recherche (consentement) + recherche relancée + 2e recherche
+      const pause = await ask('mets la vidéo en pause');
+      assert.strictEqual(pause.answer, 'Vidéo en pause, Monsieur.');
+      st = await (await fetch(`http://localhost:${YT_ROCKET}/api/youtube`)).json();
+      assert.strictEqual(st.playing, false);
+    });
+  } finally {
+    ytServer.kill();
+    fakeYt.server.close();
+    require('fs').rmSync(path.join(__dirname, '..', '.rocket-youtube'), { recursive: true, force: true });
+  }
+
   // ---------- v5 : réponse en flux (faux Claude lent) ----------
   const FAST_PORT = PORT + 1;
   const fastServer = await startServer(FAST_PORT, { ROCKET_FAKE_CLAUDE: '1' });

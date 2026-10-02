@@ -1,4 +1,4 @@
-# 🚀 Rocket v6 — votre assistant personnel
+# 🚀 Rocket v7 — votre assistant personnel
 
 Rocket répond à **toutes vos questions**, à la voix. Et quand vous le lui demandez, il vous lit un point complet : Bourses, taux et devises, matières premières, radar
 investissement, actualité économique et politique, votre agenda du jour, une idée de recette et un conseil
@@ -10,6 +10,7 @@ Rocket a aussi des onglets **Cuisine**, **Ciné**, **Coach hygiène de vie** et 
 > Anciennes versions :
 > v1 (Nova et Atlas) <https://github.com/PaulDecat/Rocket/archive/2ccb6165a41820e973bcd36aa1c50007151c37de.zip> ·
 > v2 <https://github.com/PaulDecat/Rocket/archive/640944de63e88e35ca1c1138c063e504ddbdcd4b.zip> ·
+> v6 <https://github.com/PaulDecat/Rocket/archive/3402c63fa8689582f1feb215b29a377055cf0c60.zip> ·
 > v5 <https://github.com/PaulDecat/Rocket/archive/3bf49c6d9ff91fc43f944da474c8e32c2e0efe45.zip> ·
 > v4 <https://github.com/PaulDecat/Rocket/archive/3918e77b2443a52b758a2cb2b61d3c6ab35eed48.zip> ·
 > v3 <https://github.com/PaulDecat/Rocket/archive/ef08f62621873e912bee1cfe21348f41bee582d3.zip>
@@ -141,7 +142,27 @@ Votre planning et vos habitudes restent **dans votre navigateur** (rien n'est en
 
 ---
 
-## 5. Pour que Rocket réponde à tout : Claude (fortement recommandé)
+## 5. Le « cerveau » de Rocket : Claude, et l'IA locale de secours (nouveau dans la v7)
+
+Rocket choisit tout seul, à chaque question :
+
+1. **Claude** s'il est connecté (le plus intelligent, cherche aussi sur Internet) ;
+2. sinon, **l'IA locale** : une intelligence artificielle **gratuite**, installée sur votre ordinateur, qui
+   fonctionne **même sans Claude** (et même sans Internet) ;
+3. sinon, ses propres connaissances (heure, calculs, météo, Wikipédia).
+
+Si Claude est déconnecté (session expirée, quota atteint…), Rocket ne perd plus de temps à le réessayer :
+il passe tout de suite à l'IA locale et ne réessaie Claude que 30 minutes plus tard. ⚙ affiche le cerveau
+utilisé, et les réponses de l'IA locale sont signalées « ROCKET · IA LOCALE ».
+
+### Installer l'IA locale (une seule fois, fortement recommandé)
+
+Double-cliquez sur **`Installer l'IA locale.bat`** : il installe Ollama puis télécharge le modèle
+« qwen2.5 » (environ 4,7 Go, bon en français). Il faut environ 8 Go de mémoire vive. Relancez ensuite Rocket :
+le terminal affiche « IA locale (secours, hors ligne) : qwen2.5:7b ». Si l'installation automatique échoue,
+installez Ollama depuis <https://ollama.com/download>, puis relancez le fichier.
+
+### Claude
 
 Sans Claude, Rocket gère les marchés, l'heure, la date, les calculs, la météo, les définitions et
 personnalités (Wikipédia) et les commandes de l'appli. **Pour répondre à n'importe quelle question**
@@ -169,6 +190,13 @@ Autre possibilité : une clé API Anthropic dans un fichier `.env` (voir `.env.e
 - **Météo** : indiquez votre ville dans ⚙ → « Votre ville » (Paris par défaut).
 - **Voix** : voix Microsoft gratuites (Internet nécessaire), sinon voix du navigateur. Réglages ⚙ : voix de
   Rocket et vitesse.
+- **YouTube (nouveau dans la v7)** : « Ok Rocket, mets la vidéo de chats qui dansent, s'il te plaît »,
+  « mets Bella de Gims », « mets du jazz », « lance la bande-annonce de Dune », « mets la vidéo en pause »,
+  « reprends la vidéo », « vidéo suivante », « monte le son ». Rocket ouvre **sa propre fenêtre** Chrome (ou
+  Edge), accepte les conditions de YouTube, cherche et lance la vidéo. Les demandes suivantes **réutilisent le
+  même onglet**. Ne fermez pas cette fenêtre si vous voulez garder la musique (sinon Rocket la rouvrira).
+  Cette fenêtre a son propre profil : vous pouvez vous y connecter à votre compte YouTube une fois, c'est retenu.
+  Pour revenir à Deezer : ⚙ → « Jouer la musique dans ».
 - **Musique Deezer** : sur Mac dans l'appli Deezer ; sur Windows dans le lecteur intégré (souvent des extraits
   de 30 secondes). Vos playlists : collez le lien de votre profil Deezer dans ⚙ (profil et playlists publics).
 - **Téléphone** : le terminal affiche une adresse « Sur le Wi-Fi » à ouvrir sur le téléphone (même Wi-Fi).

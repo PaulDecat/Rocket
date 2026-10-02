@@ -8,9 +8,12 @@
     "start": "node server.js",
     "test": "node tests/unit.js && node tests/e2e.js"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.129.0",
-    "msedge-tts": "^2.0.8"
+    "msedge-tts": "^2.0.8",
+    "playwright-core": "^1.56.1"
   }
 }

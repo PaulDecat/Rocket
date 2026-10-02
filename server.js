@@ -159,7 +159,7 @@ async function handle(req, res) {
   if (p === '/api/config' && req.method === 'GET') {
     return sendJson(res, 200, {
       name: 'Rocket', tts: tts.provider(), voices: tts.VOICES, defaultVoice: tts.DEFAULT_VOICE, version: 2,
-      ai: assistant.getMode(), local: isLocal(req),
+      ai: assistant.getMode(), local: isLocal(req), brain: await assistant.brainStatus(),
     });
   }
 
@@ -261,6 +261,11 @@ async function handle(req, res) {
     return sendJson(res, 200, { key: SIRI_KEY, urls: lanAddresses().map((a) => `http://${a}:${PORT}/api/siri`) });
   }
 
+  if (p === '/api/youtube' && req.method === 'GET') {
+    if (!isLocal(req)) return sendJson(res, 403, { error: LOCAL_ONLY_MSG });
+    return sendJson(res, 200, await require('./lib/youtube').state());
+  }
+
   if (p.startsWith('/api/')) return sendJson(res, 404, { error: 'Route inconnue' });
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
   return serveStatic(req, res, p);
@@ -310,6 +315,8 @@ if (require.main === module) {
     console.log(`  Voix : ${voice === 'edge' ? 'Microsoft (gratuites)' : voice === 'elevenlabs' ? 'ElevenLabs' : 'navigateur'}`);
     await assistant.init();
     console.log(`  Réponses : ${assistant.modeLabel()}`);
+    const localAi = await require('./lib/ollama').warm();
+    console.log(localAi ? `  IA locale (secours, hors ligne) : ${localAi}` : "  IA locale (secours) : non installée — voir « Installer l'IA locale.bat »");
     console.log('  Pour arrêter : Ctrl + C\n');
     getBriefing(false).catch(() => {});
     if (process.env.ROCKET_OPEN === '1') openBrowser(`http://localhost:${PORT}`);
